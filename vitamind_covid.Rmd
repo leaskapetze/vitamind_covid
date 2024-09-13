@@ -1,0 +1,1153 @@
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(lubridate) 
+library(ggplot2)
+library(rlang)
+library(tidyr)
+library(stringr)
+library(stats)
+library(purrr)
+library(ggsignif)
+library(MatchIt)
+library(lmtest)
+library(sandwich)
+library(parallel)
+library(broom)
+library(cobalt)
+library(optmatch)
+library(lm.beta)
+library(grf)
+library(tidyverse)
+library(mediation)
+library(dplyr)
+
+# Turn off scientific notations
+options(scipen = 999)
+```
+
+## 0. Load the data and filter for only Vitamin D
+
+```{r}
+df <- read.csv("/data/share/arx/Internal_covid19_nutrient/20240320_Internal_covid19_nutrient_processed_anonzmized.csv")
+
+df <- df %>%
+  filter(gender != "X") %>%
+  filter(honic_param_short == "VD3") %>% # to be changed for a different param
+  mutate(
+    full_name = "Vitamin D", # to be changed for a different param
+    unit = "µg/l" # to be changed for a different param
+  )
+
+head(df)
+```
+
+## 1. Prepare the data
+
+```{r}
+# Adjust age groups
+df <- df %>%
+  mutate(age_group = case_when(
+    age_at_first_measurement %in% c("[18, 30[", "[30, 40[") ~ "[18, 39]",
+    age_at_first_measurement %in% c("[40, 50[", "[50, 60[") ~ "[40, 59]",
+    age_at_first_measurement == ">=60" ~ "60+",
+    TRUE ~ "Unknown" # In case there are entries that don't fit the above categories
+  ))
+
+# Convert 'cohort_year' and 'test_month' to date format
+df$test_date <- with(df, paste(cohort_year, test_month, "01", sep="-"))
+df$test_date <- as.Date(df$test_date, format="%Y-%m-%d")
+
+# Define periods “B” for before the pandemic and “D” for during the pandemic
+
+# Define the periods
+period1 <- c(as.Date("2018-03-01"), as.Date("2020-02-29"))
+period2 <- c(as.Date("2020-03-01"), as.Date("2022-03-31"))
+
+# Assign each entry to a period
+assign_period <- function(date) {
+  if (date >= period1[1] && date <= period1[2]) {
+    return("B")
+  } else if (date >= period2[1] && date <= period2[2]) {
+    return("D")
+  } else {
+    return(NA) 
+  }
+}
+
+# Create a new column for the period
+df$period <- as.character(sapply(df$test_date, assign_period))
+
+# Filter out entries that do not belong to either period
+df <- df[!is.na(df$period),]
+
+head(df)
+```
+
+## 2. Stringency Index
+
+```{r}
+# Read stringency index mapping table
+stringency_index <- read.csv("/data/share/arx/Internal_covid19_nutrient/oxford_stringency_index.csv")
+
+# Convert 'Date' from '20200101' to '2020-01-01' in stringency_index
+stringency_index$Date <- as.Date(as.character(stringency_index$Date), "%Y%m%d")
+# Many duplicates per Date in the data:
+# Aggregate stringency index by date, averaging the StringencyIndex_Average values
+stringency_index_aggregated <- stringency_index %>%
+  group_by(Date) %>%
+  summarise(StringencyIndex_Average = mean(StringencyIndex_Average, na.rm = TRUE))
+
+# Filter out the subset where Period is "D"
+df_D <- df[df$period == "D",]
+
+# Ensure 'test_date' in df_D is of Date class (if not already)
+df_D$test_date <- as.Date(df_D$test_date)
+
+# Merge df_D with the subset of stringency_index based on the date columns
+df_D <- left_join(df_D, stringency_index_aggregated, by = c("test_date" = "Date"))
+
+head(df_D)
+```
+
+```{r}
+# Does stringency index correlate with test_month?
+# Calculate average stringency index by month
+monthly_stringency <- df_D %>%
+  group_by(test_month) %>%
+  summarise(avg_stringency = mean(StringencyIndex_Average, na.rm = TRUE))
+
+# Plotting the average stringency index over months
+ggplot(monthly_stringency, aes(x = test_month, y = avg_stringency)) +
+  geom_line() +
+  labs(title = "Average Stringency Index by Test Month",
+       x = "Test Month",
+       y = "Average Stringency Index") +
+  theme_minimal()
+
+# Calculate correlation coefficient
+cor.test(monthly_stringency$test_month, monthly_stringency$avg_stringency, method = "pearson")
+# there is no significant linear relationship between the test_month and the average stringency index
+```
+
+```{r}
+# Linear Regression Model to test effect of stringency index on Vit D levels
+# Prepare covariate columns
+df_D$gender <- as.factor(df_D$gender)
+df_D$test_month <- as.factor(df_D$test_month)
+df_D$age_group <- as.factor(df_D$age_group)
+
+# Fit the linear regression model
+model <- lm(first_value ~ StringencyIndex_Average + age_group + gender + test_month, data = df_D)
+
+# Summary of the model to view coefficients and statistics
+summary(model)
+
+# StringencyIndex_Average: Shows a negative coefficient (-0.016539), indicating that an increase in the stringency index (stricter measures) is associated with a slight decrease in Vitamin D levels. The effect is statistically significant.
+```
+
+## 3. Descriptive Statistics
+
+```{r}
+# Count sample size in period "B" and period "D"
+sample_size_period <- df %>% 
+  count(period)
+
+sample_size_contingency <- with(df, table(period))
+sample_size_p_value <- chisq.test(sample_size_contingency)$p.value
+
+# Count how many entries for each age group in period "B" and "D" (absolute nr and percentage)
+age_group_counts <- df %>%
+  group_by(period, age_group) %>%
+  summarise(n = n(), .groups = 'drop') %>%
+  group_by(period) %>%
+  mutate(percentage = n / sum(n) * 100) %>%
+  ungroup()
+
+age_group_contingency <- with(df, table(period, age_group))
+age_group_p_value <- chisq.test(age_group_contingency)$p.value
+
+# Count how many entries for each gender group in period "B" and "D" (absolute nr and percentage)
+gender_group_counts <- df %>%
+  group_by(period, gender) %>%
+  summarise(n = n(), .groups = 'drop') %>%
+  group_by(period) %>%
+  mutate(percentage = n / sum(n) * 100) %>%
+  ungroup()
+
+
+gender_group_contingency <- with(df, table(period, gender))
+gender_group_p_value <- chisq.test(gender_group_contingency)$p.value
+
+# The mean vitamin D level in period B and D (with standard deviation)
+mean_vitamin_d_levels <- df %>%
+  group_by(period) %>%
+  summarise(
+    mean_value = mean(first_value, na.rm = TRUE),
+    sd_value = sd(first_value, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+# Determining deficiency status 
+thresholds <- list(
+  VD3 = 20  # to be changed for a different param
+)
+
+# Function to check deficiency for Vitamin D
+get_deficiency_status <- function(value) {
+  threshold <- thresholds$VD3 # to be changed for a different param
+  if (!is.na(value) && value < threshold) {
+    return(1)  # Deficient
+  } else {
+    return(0)  # Not deficient
+  }
+}
+
+# Function to extract numeric value from strings like "<200" or ">4.0"
+extract_numeric <- function(str) {
+  as.numeric(gsub("[^0-9.]", "", str))
+}
+
+df <- df %>%
+  rowwise() %>%
+  mutate(combined_value = ifelse(!is.na(first_value), as.numeric(first_value),
+                                 ifelse(!is.na(first_value_string), extract_numeric(first_value_string), NA_real_))) %>%
+  mutate(deficient = get_deficiency_status(combined_value)) %>%
+  ungroup()
+
+# Vitamin D deficiency rate for period B and D (in percent)
+vitamin_d_deficiency_rate <- df %>%
+  group_by(period) %>%
+  summarise(
+    deficiency_count = sum(deficient),             
+    total_count = n(), 
+    deficiency_rate = sum(deficient) / n() * 100, 
+    .groups = 'drop')
+
+# Printing results
+print(sample_size_period)
+print(sample_size_p_value)
+print(age_group_counts)
+print(age_group_p_value)
+print(gender_group_counts)
+print(gender_group_p_value)
+print(mean_vitamin_d_levels)
+print(vitamin_d_deficiency_rate)
+```
+
+
+```{r}
+# Count occurrences of each diagnosis and find the top 5
+top_5_diagnoses <- df %>%
+  group_by(diagnosis) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  arrange(desc(count)) %>%
+  slice(1:6)
+
+# Display the top 5 diagnoses
+print(top_5_diagnoses)
+```
+
+```{r}
+# Compare mean vitamin D levels between periods using t-test
+vitamin_d3_levels_B <- df %>% filter(period == "B") %>% pull(first_value)
+vitamin_d3_levels_D <- df %>% filter(period == "D") %>% pull(first_value)
+
+t_test_results <- t.test(vitamin_d3_levels_B, vitamin_d3_levels_D, na.rm = TRUE)
+mean_comparison_p_value <- t_test_results$p.value
+
+print(mean_comparison_p_value)
+
+
+# Construct a contingency table for deficiencies in periods B and D
+deficiency_table <- df %>% 
+  group_by(period) %>% 
+  summarise(deficient = sum(deficient), not_deficient = n() - sum(deficient)) %>%
+  select(-period) %>% 
+  as.matrix()
+
+chi_square_test_result <- chisq.test(deficiency_table)
+  deficiency_comparison_p_value <- chi_square_test_result$p.value
+  
+
+print(deficiency_comparison_p_value)
+
+#Mean Vitamin D levels by age group
+vitamin_d3_age_means <- df %>%
+  group_by(period, age_group) %>%
+  summarise(
+    mean_value = mean(first_value, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+ggplot(vitamin_d3_age_means, aes(x = period, y = mean_value, group = age_group, color = age_group)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Period", y = "Mean Vitamin D Level", title = "Change in Mean Vitamin D Levels by Age Group") +
+  theme_classic() +
+  scale_color_brewer(palette = "Set1", name = "Age Group") +
+  theme(legend.title = element_text())
+
+
+# Mean Vitamin D Levels by gender group
+vitamin_d3_gender_means <- df %>%
+  filter(honic_param_short == "VD3", gender != "X") %>%
+  group_by(period, gender) %>%
+  summarise(
+    mean_value = mean(first_value, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+ggplot(vitamin_d3_gender_means, aes(x = period, y = mean_value, group = gender, color = gender)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Period", y = "Mean Vitamin D Level", title = "Change in Mean Vitamin D Levels by Gender") +
+  theme_classic() +
+  scale_color_manual(values = c("F" = "red", "M" = "blue"), name = "Gender") +
+  theme(legend.title = element_text())
+
+```
+
+```{r}
+# Display numeric values
+age_group_stats <- df %>%
+  group_by(period, age_group) %>%
+  summarise(
+    mean_value = mean(first_value, na.rm = TRUE),
+    sd_value = sd(first_value, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+gender_group_stats <- df %>%
+  filter(gender %in% c("M", "F")) %>%
+  group_by(period, gender) %>%
+  summarise(
+    mean_value = mean(first_value, na.rm = TRUE),
+    sd_value = sd(first_value, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+
+print(age_group_stats)
+print(gender_group_stats)
+```
+
+```{r}
+# Statistical Testing within each sub-group
+
+# Function to perform a t-test and return p-value
+perform_t_test <- function(data_group_1, data_group_2) {
+  test_result <- t.test(data_group_1, data_group_2, na.rm = TRUE)
+  return(test_result$p.value)
+}
+
+# Calculate p-values for age groups
+p_values_age_groups <- df %>%
+  group_by(age_group) %>%
+  summarise(
+    t_test_p_value = perform_t_test(
+      first_value[period == "B"],
+      first_value[period == "D"]
+    ),
+    .groups = 'drop'  
+  )
+
+# Calculate p-values for gender groups, making sure to exclude gender "X"
+p_values_gender_groups <- df %>%
+  filter(gender %in% c("M", "F")) %>%
+  group_by(gender) %>%
+  summarise(
+    t_test_p_value = perform_t_test(
+      first_value[period == "B"],
+      first_value[period == "D"]
+    ),
+    .groups = 'drop'  
+  )
+
+# Print p-values
+print(p_values_age_groups)
+print(p_values_gender_groups)
+```
+
+```{r}
+# Create a new column that combines year and month into a date
+df <- df %>%
+  mutate(year_month = as.Date(paste(cohort_year, test_month, "1", sep = "-"))) %>%
+  arrange(year_month) 
+
+# Calculate mean and standard deviation of Vitamin D levels by year-month
+monthly_vitamin_d_stats <- df %>%
+  group_by(year_month) %>%
+  summarise(
+    mean_value = mean(first_value, na.rm = TRUE),
+    sd_value = sd(first_value, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+# Plot the monthly Vitamin D stats with error bars for standard deviation
+ggplot(monthly_vitamin_d_stats, aes(x = year_month, y = mean_value)) +
+  geom_line() +
+  geom_errorbar(aes(ymin = mean_value - sd_value, ymax = mean_value + sd_value), width = 0.2) +
+  geom_point() +
+  labs(x = "Month", y = "Mean Vitamin D Level (µg/l)", title = "Monthly Evolution of Mean Vitamin D Levels") +
+  theme_classic() +
+  scale_x_date(date_breaks = "3 months", date_labels = "%b %Y") + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+```
+
+
+```{r}
+# Mean Vitamin D Levels by season 
+
+# Define seasons based on test_month
+df <- df %>%
+  mutate(season = case_when(
+    test_month %in% c(12, 1, 2) ~ "Winter",
+    test_month %in% c(3, 4, 5) ~ "Spring",
+    test_month %in% c(6, 7, 8) ~ "Summer",
+    test_month %in% c(9, 10, 11) ~ "Autumn",
+    TRUE ~ NA_character_
+  ))
+
+# Calculate mean Vitamin D levels by period and season
+vitamin_d3_season_means <- df %>%
+  group_by(period, season) %>%
+  summarise(
+    mean_value = mean(first_value, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+# Plotting mean Vitamin D levels by season across periods "B" and "D"
+ggplot(vitamin_d3_season_means, aes(x = period, y = mean_value, group = season, color = season)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Period", y = "Mean Vitamin D Level", title = "Change in Mean Vitamin D Levels by Season") +
+  theme_classic() +
+  scale_color_manual(values = c("Winter" = "blue", "Summer" = "gold", "Spring" = "violet", "Autumn" = "orange"), name = "Season") +
+  theme(legend.title = element_text())
+```
+```{r}
+# Calculate the deficiency rates for each gender group
+deficiency_gender_groups <- df %>%
+  group_by(gender, period) %>%
+  summarise(deficient_count = sum(deficient), total_count = n(), .groups = 'drop') %>%
+  pivot_wider(
+    names_from = period,
+    values_from = c(deficient_count, total_count),
+    values_fill = list(deficient_count = 0, total_count = 0)
+  ) %>%
+  mutate(
+    rate_B = if_else(total_count_B > 0, deficient_count_B / total_count_B * 100, 0),
+    rate_D = if_else(total_count_D > 0, deficient_count_D / total_count_D * 100, 0)
+  ) %>%
+  # Calculate p-values
+  rowwise() %>%
+  mutate(p_value = chisq.test(rbind(c(deficient_count_B, total_count_B - deficient_count_B), 
+                                    c(deficient_count_D, total_count_D - deficient_count_D)))$p.value) %>%
+  ungroup()
+
+# Print the results for gender groups
+print(deficiency_gender_groups)
+```
+
+```{r}
+# Calculate the deficiency rates for each age group
+deficiency_age_groups <- df %>%
+  group_by(age_group, period) %>%
+  summarise(deficient_count = sum(deficient), total_count = n(), .groups = 'drop') %>%
+  pivot_wider(
+    names_from = period,
+    values_from = c(deficient_count, total_count),
+    values_fill = list(deficient_count = 0, total_count = 0) # Fill missing periods with zeros
+  ) %>%
+  mutate(
+    rate_B = if_else(total_count_B > 0, deficient_count_B / total_count_B * 100, 0),
+    rate_D = if_else(total_count_D > 0, deficient_count_D / total_count_D * 100, 0)
+  ) %>%
+  # Calculate p-values
+  rowwise() %>%
+  mutate(p_value = chisq.test(rbind(c(deficient_count_B, total_count_B - deficient_count_B), 
+                                    c(deficient_count_D, total_count_D - deficient_count_D)))$p.value) %>%
+  ungroup()
+
+# Print the results for age groups
+print(deficiency_age_groups)
+```
+
+```{r}
+# Vitamin D test rate month by month
+
+# Count the number of entries per month
+monthly_test_rate <- df %>%
+  group_by(year_month) %>%
+  summarise(test_count = n(), .groups = 'drop') %>%
+  arrange(year_month)
+
+# Plot the monthly test rate
+ggplot(monthly_test_rate, aes(x = year_month, y = test_count)) +
+  geom_line() +
+  geom_point() +
+  labs(x = "Month", y = "Test Count", title = "Monthly Test Rate for Vitamin D") +
+  theme_classic() +
+  scale_x_date(date_breaks = "3 months", date_labels = "%b %Y") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+## 4. Randomization and Propensity Score Matching
+### 4.1 Test Matching
+```{r}
+# preparing the data
+df$gender <- factor(df$gender)
+df$age_group <- factor(df$age_group)
+df$period <- factor(df$period)
+df$test_month <- factor(df$test_month)
+```
+
+```{r}
+# test matching
+# only for 10% of the data to tweak parameters of matching algorithm
+df_sampled <- df %>%
+  sample_frac(size = 0.1)
+
+# default parameters used here
+test_match_obj <- matchit(period ~ age_group + gender + test_month, data = df_sampled, method = "nearest", distance = "glm", ratio = 1) 
+
+# After performing matching
+matched_data <- match.data(test_match_obj)
+
+chisq.test(matched_data$period, matched_data$gender) 
+chisq.test(df$period, df$gender)
+
+chisq.test(matched_data$period, matched_data$age_group) 
+chisq.test(df$period, df$age_group)
+
+chisq.test(matched_data$period, matched_data$test_month) 
+chisq.test(df$period, df$test_month)
+```
+
+```{r}
+bal.tab(test_match_obj, un = TRUE)
+```
+
+```{r}
+# adding caliper of 0.1 standard deviations -> calipers limit the distance within which matches are acceptable, helping ensure closer matches
+test_match_obj <- matchit(period ~ age_group + gender + test_month, data = df_sampled, method = "nearest", distance = "glm", ratio = 1, caliper = 0.1) 
+
+# After performing matching
+matched_data <- match.data(test_match_obj)
+
+chisq.test(matched_data$period, matched_data$gender) 
+chisq.test(df$period, df$gender)
+
+chisq.test(matched_data$period, matched_data$age_group) 
+chisq.test(df$period, df$age_group)
+
+chisq.test(matched_data$period, matched_data$test_month) 
+chisq.test(df$period, df$test_month)
+```
+
+```{r}
+# optimal matching instead of nearest neighbor
+test_match_obj <- matchit(period ~ age_group + gender + test_month, data = df_sampled, method = "optimal", distance = "glm") 
+
+# After performing matching
+matched_data <- match.data(test_match_obj)
+
+chisq.test(matched_data$period, matched_data$gender) 
+chisq.test(df$period, df$gender)
+
+chisq.test(matched_data$period, matched_data$age_group) 
+chisq.test(df$period, df$age_group)
+
+chisq.test(matched_data$period, matched_data$test_month) 
+chisq.test(df$period, df$test_month)
+
+# output too big?!
+```
+
+```{r}
+# using exact matching for the age group
+test_match_obj <- matchit(period ~ age_group + gender + test_month, data = df_sampled, method = "nearest", distance = "glm", exact = "age_group") 
+
+# After performing matching
+matched_data <- match.data(test_match_obj)
+
+chisq.test(matched_data$period, matched_data$gender) 
+chisq.test(df$period, df$gender)
+
+chisq.test(matched_data$period, matched_data$age_group) 
+chisq.test(df$period, df$age_group)
+
+chisq.test(matched_data$period, matched_data$test_month) 
+chisq.test(df$period, df$test_month)
+```
+
+```{r}
+# using exact matching for all characteristics
+test_match_obj <- matchit(period ~ age_group + gender + test_month, data = df_sampled, method = "nearest", distance = "glm", exact = c("gender", "age_group", "test_month")) 
+
+# After performing matching
+matched_data <- match.data(test_match_obj)
+
+chisq.test(matched_data$period, matched_data$gender) 
+chisq.test(df$period, df$gender)
+
+chisq.test(matched_data$period, matched_data$age_group) 
+chisq.test(df$period, df$age_group)
+
+chisq.test(matched_data$period, matched_data$test_month) 
+chisq.test(df$period, df$test_month)
+```
+
+```{r}
+# performing exact matching parameters on the entire sample
+test_match_obj <- matchit(period ~ age_group + gender + test_month, data = df, method = "nearest", distance = "glm", exact = c("gender", "age_group", "test_month")) 
+
+matched_data <- match.data(test_match_obj)
+
+# Calculate the sample sizes
+original_size <- nrow(df)  # Total original sample size
+matched_size <- nrow(matched_data)  # Total matched sample size
+
+# Calculate the number and percentage of observations lost
+num_lost <- original_size - matched_size
+percent_lost <- (num_lost / original_size) * 100
+
+# Print results
+cat("Original Sample Size: ", original_size, "\n")
+cat("Matched Sample Size: ", matched_size, "\n")
+cat("Number of Observations Lost: ", num_lost, "\n")
+cat("Percentage Lost: ", percent_lost, "%\n")
+
+```
+
+
+```{r}
+# Calculate summaries for Age with Chi-squared Test for Independence
+age_summary <- matched_data %>%
+  group_by(period, age_group) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  group_by(period) %>%
+  mutate(percentage = count / sum(count) * 100)
+
+# Conduct Chi-squared Test and append the result
+age_table <- xtabs(count ~ period + age_group, data = age_summary)
+age_chi_sq_test <- tryCatch(chisq.test(age_table), error = function(e) e)
+age_p_value <- ifelse(class(age_chi_sq_test) == "try-error", NA, age_chi_sq_test$p.value)
+
+# Calculate summaries for Gender with Chi-squared Test
+gender_summary <- matched_data %>%
+  group_by(period, gender) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  group_by(period) %>%
+  mutate(percentage = count / sum(count) * 100)
+
+# Conduct Chi-squared Test and append the result
+gender_table <- xtabs(count ~ period + gender, data = gender_summary)
+gender_chi_sq_test <- tryCatch(chisq.test(gender_table), error = function(e) e)
+gender_p_value <- ifelse(class(gender_chi_sq_test) == "try-error", NA, gender_chi_sq_test$p.value)
+
+# Calculate summaries for Test month with Chi-squared Test
+test_month_summary <- matched_data %>%
+  group_by(period, test_month) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  group_by(period) %>%
+  mutate(percentage = count / sum(count) * 100)
+
+# Conduct Chi-squared Test and append the result
+test_month_table <- xtabs(count ~ period + test_month, data = test_month_summary)
+test_month_chi_sq_test <- tryCatch(chisq.test(test_month_table), error = function(e) e)
+test_month_p_value <- ifelse(class(test_month_chi_sq_test) == "try-error", NA, test_month_chi_sq_test$p.value)
+
+# Calculate mean and standard deviation for Vitamin D levels and perform t-test
+vitamin_d_summary <- matched_data %>%
+  group_by(period) %>%
+  summarise(
+    mean_vitamin_d = mean(first_value, na.rm = TRUE),
+    sd_vitamin_d = sd(first_value, na.rm = TRUE),
+    .groups = 'drop'
+  )
+vitamin_d_t_test <- t.test(first_value ~ period, data = matched_data)
+vitamin_d_p_value <- vitamin_d_t_test$p.value
+
+# Calculate the percentage of deficiencies for each period and perform Chi-squared Test
+deficiency_summary <- matched_data %>%
+  group_by(period) %>%
+  summarise(
+    total = n(),
+    deficient_count = sum(deficient == 1, na.rm = TRUE),
+    non_deficient_count = sum(deficient == 0, na.rm = TRUE),
+    deficiency_rate = deficient_count / total * 100,
+    .groups = 'drop'
+  )
+
+# Create a contingency table for the Chi-squared test
+deficiency_table <- xtabs(~ period + deficient, data = matched_data)
+
+# Conduct Chi-squared Test and append the result
+deficiency_chi_sq_test <- tryCatch(chisq.test(deficiency_table), error = function(e) e)
+deficiency_p_value <- ifelse(class(deficiency_chi_sq_test) == "try-error", NA, deficiency_chi_sq_test$p.value)
+
+# Print the summaries and p-values
+print(age_summary)
+print(paste("Age Group P-value:", age_p_value))
+print(gender_summary)
+print(paste("Gender P-value:", gender_p_value))
+print(test_month_summary)
+print(paste("Test Month P-value:", test_month_p_value))
+print(vitamin_d_summary)
+print(paste("Vitamin D Levels P-value:", vitamin_d_p_value))
+print(deficiency_summary)
+print(paste("Deficiency Rate P-value:", deficiency_p_value))
+
+```
+
+
+### 4.2 Parallel Processing: Sample Matching + Bootstrapping
+
+#### 4.2.1 T test
+```{r}
+set.seed(123) # For reproducibility
+n_simulations <- 1000
+
+# Set up cluster
+cl <- makeCluster(detectCores() - 1) # reserve one core for system processes
+
+# Load the necessary libraries on each worker node
+clusterEvalQ(cl, {
+  library(dplyr)
+  library(MatchIt)
+})
+
+# Define function for one iteration
+one_iteration <- function(seed) {
+  set.seed(seed)
+  sampled_data <- df %>% 
+    sample_frac(.1)  # Correctly sample 10% of df
+
+  match_obj <- matchit(period ~ age_group + gender + test_month, data = sampled_data, method = "nearest", distance = "glm", exact = c("gender", "age_group", "test_month"))
+  matched_data <- match.data(match_obj)
+
+  t_test_results <- t.test(first_value ~ period, data = matched_data, na.rm = TRUE)
+  return(data.frame(est = t_test_results$estimate, ci_lower = t_test_results$conf.int[1], ci_upper = t_test_results$conf.int[2]))
+}
+
+# Export data and the one_iteration function to all cores
+clusterExport(cl, c("df", "one_iteration"))
+
+# Run simulations in parallel
+seeds <- sample.int(10000, n_simulations, replace = TRUE)
+results <- parLapply(cl, seeds, one_iteration)  # Collect results as a list of data frames
+
+# Stop cluster
+stopCluster(cl)
+
+# Convert the list of results to a more manageable data frame
+results_df <- do.call(rbind, results)
+colnames(results_df) <- c("Estimate", "CI Lower", "CI Upper")
+
+# Calculate bootstrap confidence intervals for the estimates
+bootstrap_ci <- apply(results_df[, "Estimate", drop = FALSE], 2, function(x) quantile(x, c(0.025, 0.975)))
+
+# Print bootstrap confidence intervals
+print(paste("Bootstrap CI for estimates:", paste(bootstrap_ci, collapse = ", ")))
+
+# Create a histogram of the estimates
+hist(results_df$Estimate, breaks = 30, main = "Distribution of Estimates")
+```
+
+#### 4.2.2 Linear Regression
+```{r}
+# trying it out on a sample data
+sampled_data <- df %>% 
+    sample_frac(.1)
+lm_model <- lm.beta(lm(first_value ~ period + age_group + gender + test_month, data = sampled_data))
+summary(lm_model)
+```
+
+
+```{r}
+# performing it on the entire data
+
+set.seed(123) # For reproducibility
+n_simulations <- 1000
+
+# Set up cluster
+cl <- makeCluster(detectCores() - 1) # reserve one core for system processes
+
+# Load the necessary libraries on each worker node
+clusterEvalQ(cl, {
+  library(dplyr)
+  library(MatchIt)
+  library(lm.beta)
+})
+
+# Define function for one iteration
+one_iteration <- function(seed) {
+  set.seed(seed)
+  sampled_data <- df %>% 
+    sample_frac(.1)  # Correctly sample 10% of df
+
+  match_obj <- matchit(period ~ age_group + gender + test_month, data = sampled_data, method = "nearest", distance = "glm", exact = c("gender", "age_group", "test_month"))
+  matched_data <- match.data(match_obj)
+
+  # Adjust model fitting if categorical variables are handled as numeric
+  period_numeric <- as.numeric(matched_data$period)
+  lm_model <- lm.beta(lm(first_value ~ period + age_group + gender + test_month, data = sampled_data))
+  beta_values <- coef(lm_model)[2]
+  return(beta_values)  # Ensure returning the named vector of beta values
+}
+
+# Ensure correct setup for parallel processing
+clusterExport(cl, c("df", "one_iteration"))
+results <- parLapply(cl, seeds, one_iteration)
+
+# Stop cluster
+stopCluster(cl)
+
+# Convert the list of results to a more manageable data frame, preserving names
+results_df <- do.call(rbind, lapply(results, function(x) as.data.frame(t(x))))
+colnames(results_df) <- names(results[[1]])  # This sets the column names based on the first result's coefficient names
+
+# Calculate bootstrap confidence intervals for each coefficient, preserving names
+bootstrap_ci <- sapply(results_df, function(x) quantile(x, probs = c(0.025, 0.975), na.rm = TRUE))
+
+# Print each coefficient's name with its corresponding bootstrap confidence interval
+print("Bootstrap CI for each coefficient:")
+print(bootstrap_ci)
+
+```
+
+#### 4.2.3 ANCOVA
+```{r}
+
+aov_model <- aov(first_value ~ period + age_group + gender + test_month, data = sampled_data)
+summary(aov_model)
+```
+
+
+## 5.Causal Machine Learning: Random Forest ON UNMATCHED DATA
+### 5.1 With test_month
+```{r}
+# We need the feature matrix to be all numerical -> therefore, we need to transform our categorical covariates gender and age_group into numerical ones
+# Transform 'age_group' to a numeric variable
+df$age_group <- as.factor(df$age_group)
+df$age_group_numeric <- as.integer(df$age_group)
+
+# Transform 'gender' to a numeric variable
+df$gender <- as.factor(df$gender)
+df$gender_numeric <- as.integer(df$gender)
+
+# Ensure 'test_month' is numeric
+df$test_month <- as.numeric(as.character(df$test_month))
+
+# Also, the "treatment" variable in our case is the pandemic, so we need to introduce a binary column that we can use as treatment variable
+# Convert 'period' to a binary treatment indicator
+# Taking "B" as control (0) and "D" as treatment (1)
+df$treatment <- ifelse(df$period == "D", 1, 0)
+
+# Building the causal forest model
+causal_forest_model <- causal_forest(
+  X = df[c("age_group_numeric", "gender_numeric", "test_month")], # covariates
+  Y = df$combined_value, # outcome variable
+  W = df$treatment, # treatment indicator
+  num.trees = 2000 # default setting -> subject to discuss!
+)
+
+# Estimating the average treatment effect (ATE) with confidence intervals
+ate_result <- average_treatment_effect(causal_forest_model, target.sample = "all")
+
+# Extract the point estimate and standard error
+ate_estimate <- ate_result[1]
+ate_std_err <- ate_result[2]
+
+# Calculate the 95% confidence interval
+z_score <- 1.96  # for 95% CI
+ate_ci_lower <- ate_estimate - z_score * ate_std_err
+ate_ci_upper <- ate_estimate + z_score * ate_std_err
+
+# Print the results
+print(paste("ATE Estimate:", round(ate_estimate, 4)))
+print(paste("95% Confidence Interval: [", round(ate_ci_lower, 4), ", ", round(ate_ci_upper, 4), "]", sep=""))
+
+# Calculate percentage change
+average_combined_value <- 26.30
+percentage_change <- (ate_estimate / average_combined_value) * 100
+
+# Print the percentage change
+print(paste("Percentage change due to pandemic:", round(percentage_change, 2), "%"))
+```
+
+### 5.2 With season
+```{r}
+# Take season instead of test month as covariate
+# Define a function to convert test month to season
+get_season <- function(month) {
+  if (month %in% c(12, 1, 2)) {
+    return("Winter")
+  } else if (month %in% c(3, 4, 5)) {
+    return("Spring")
+  } else if (month %in% c(6, 7, 8)) {
+    return("Summer")
+  } else if (month %in% c(9, 10, 11)) {
+    return("Fall")
+  }
+}
+
+# Apply the function to create a season column
+df$season <- sapply(df$test_month, get_season)
+df$season <- factor(df$season, levels = c("Winter", "Spring", "Summer", "Fall"))
+
+# Convert categorical variables to numeric for causal forest
+df$age_group <- as.factor(df$age_group)
+df$age_group_numeric <- as.integer(df$age_group)
+
+df$gender <- as.factor(df$gender)
+df$gender_numeric <- as.integer(df$gender)
+
+df$season_numeric <- as.integer(df$season)
+
+# Convert period to a binary treatment indicator
+df$treatment <- ifelse(df$period == "D", 1, 0)
+
+
+# Run causal forest model
+causal_forest_model <- causal_forest(
+  X = df[c("age_group_numeric", "gender_numeric", "season_numeric")], 
+  Y = df$combined_value, 
+  W = df$treatment, 
+  num.trees = 2000
+)
+
+# Extract the point estimate and standard error
+ate_estimate <- ate_result[1]
+ate_std_err <- ate_result[2]
+
+# Calculate the 95% confidence interval
+z_score <- 1.96  # for 95% CI
+ate_ci_lower <- ate_estimate - z_score * ate_std_err
+ate_ci_upper <- ate_estimate + z_score * ate_std_err
+
+# Print the results
+print(paste("ATE Estimate:", round(ate_estimate, 4)))
+print(paste("95% Confidence Interval: [", round(ate_ci_lower, 4), ", ", round(ate_ci_upper, 4), "]", sep=""))
+
+# Calculate percentage change
+average_combined_value <- 26.30
+percentage_change <- (ate_estimate / average_combined_value) * 100
+
+# Print the percentage change
+print(paste("Percentage change due to pandemic:", round(percentage_change, 2), "%"))
+```
+
+#### 5.2.1 Feature importance
+
+```{r}
+# Calculate variable importance
+importance <- variable_importance(causal_forest_model)
+
+# Convert the raw importance scores to percentages
+importance_percentage <- (importance / sum(importance)) * 100
+
+# Create a data frame for plotting
+importance_df <- data.frame(
+  covariate = c("Age Group", "Gender", "Season"),
+  importance = importance,
+  percentage = importance_percentage
+)
+
+# Print the numeric importance values and percentages
+print(importance_df)
+
+# Plotting variable importance
+ggplot(importance_df, aes(x = reorder(covariate, importance), y = importance)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Feature Importance in Causal Random Forest Model", x = "Covariate", y = "Importance") +
+  coord_flip() + 
+  theme_classic()
+
+```
+#### 5.2.2 Sensitivity Analysis - for each subgroup
+```{r}
+# Define the subgroups for age_group, gender, and season
+age_groups <- unique(df$age_group)
+gender_groups <- unique(df$gender)
+season_groups <- unique(df$season)
+
+# Function to run the causal forest model on a given subset and return the ATE and CI
+run_causal_forest <- function(subset_df) {
+  causal_forest_model <- causal_forest(
+    X = subset_df[c("age_group_numeric", "gender_numeric", "season_numeric")], 
+    Y = subset_df$combined_value, 
+    W = subset_df$treatment, 
+    num.trees = 2000
+  )
+  
+  # Estimate ATE
+  ate_result <- average_treatment_effect(causal_forest_model)
+  ate_estimate <- ate_result[1]
+  ate_std_err <- ate_result[2]
+  
+  # Calculate the 95% confidence interval
+  z_score <- 1.96
+  ate_ci_lower <- ate_estimate - z_score * ate_std_err
+  ate_ci_upper <- ate_estimate + z_score * ate_std_err
+  
+  # Calculate percentage change
+  average_combined_value <- 26.30
+  percentage_change <- (ate_estimate / average_combined_value) * 100
+  
+  return(list(ATE = ate_estimate, CI = c(ate_ci_lower, ate_ci_upper), PercentageChange = percentage_change))
+}
+
+# Run the analysis for each combination of age group, gender, and season
+results <- list()
+
+for (age in age_groups) {
+  for (gender in gender_groups) {
+    for (season in season_groups) {
+      # Subset the data
+      subset_df <- df[df$age_group == age & df$gender == gender & df$season == season, ]
+      
+      if (nrow(subset_df) > 0) {  # Ensure there is data in the subset
+        result <- run_causal_forest(subset_df)
+        results[[paste("Age:", age, "Gender:", gender, "Season:", season)]] <- result
+      }
+    }
+  }
+}
+
+# Display the results
+for (key in names(results)) {
+  cat("\nSubgroup:", key, "\n")
+  cat("ATE Estimate:", round(results[[key]]$ATE, 4), "\n")
+  cat("95% Confidence Interval: [", round(results[[key]]$CI[1], 4), ", ", round(results[[key]]$CI[2], 4), "]\n", sep="")
+  cat("Percentage Change:", round(results[[key]]$PercentageChange, 2), "%\n")
+}
+```
+
+#### 5.2.3 Sensitivity Analysis - for each covariate category
+
+```{r}
+# Define the subgroups for age_group, gender, and season
+age_groups <- unique(df$age_group)
+gender_groups <- unique(df$gender)
+season_groups <- unique(df$season)
+
+# Function to run the causal forest model on a given subset and return the ATE and CI
+run_causal_forest <- function(subset_df) {
+  causal_forest_model <- causal_forest(
+    X = subset_df[c("age_group_numeric", "gender_numeric", "season_numeric")], 
+    Y = subset_df$combined_value, 
+    W = subset_df$treatment, 
+    num.trees = 2000
+  )
+  
+  # Estimate ATE
+  ate_result <- average_treatment_effect(causal_forest_model)
+  ate_estimate <- ate_result[1]
+  ate_std_err <- ate_result[2]
+  
+  # Calculate the 95% confidence interval
+  z_score <- 1.96
+  ate_ci_lower <- ate_estimate - z_score * ate_std_err
+  ate_ci_upper <- ate_estimate + z_score * ate_std_err
+  
+  # Calculate percentage change
+  average_combined_value <- 26.30
+  percentage_change <- (ate_estimate / average_combined_value) * 100
+  
+  return(data.frame(
+    Category = "",
+    ATE_Estimate = round(ate_estimate, 4),
+    CI_Lower = round(ate_ci_lower, 4),
+    CI_Upper = round(ate_ci_upper, 4),
+    Percentage_Change = round(percentage_change, 2)
+  ))
+}
+
+# Run the analysis for each age group, gender group, and season group individually
+age_group_results <- lapply(age_groups, function(age) {
+  subset_df <- df[df$age_group == age, ]
+  result <- run_causal_forest(subset_df)
+  result$Category <- paste("Age Group:", age)
+  return(result)
+})
+
+gender_group_results <- lapply(gender_groups, function(gender) {
+  subset_df <- df[df$gender == gender, ]
+  result <- run_causal_forest(subset_df)
+  result$Category <- paste("Gender:", gender)
+  return(result)
+})
+
+season_group_results <- lapply(season_groups, function(season) {
+  subset_df <- df[df$season == season, ]
+  result <- run_causal_forest(subset_df)
+  result$Category <- paste("Season:", season)
+  return(result)
+})
+
+# Combine all results into a single data frame
+final_results <- do.call(rbind, c(age_group_results, gender_group_results, season_group_results))
+
+# Display the final results as a data frame
+print(final_results)
+
+
+```
+
+```{r}
+# Create the forest plot
+forest_plot <- ggplot(final_results, aes(x = Category, y = ATE_Estimate)) +
+  geom_point(size = 3, color = "blue") +  # Add points for ATE estimates
+  geom_errorbar(aes(ymin = CI_Lower, ymax = CI_Upper), width = 0.2, color = "red") +  # Add error bars for CIs
+  coord_flip() +  # Flip coordinates for a horizontal plot
+  labs(title = "Sensitivity Analysis: Forest Plot of ATE Estimates",
+       x = "Subgroup Category",
+       y = "ATE Estimate (with 95% CI)") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels if needed
+
+# Display the plot
+print(forest_plot)
+```
+
+## 6. Causal Machine Learning: Random Forest ON MATCHED DATA
+
+```{r}
+  match_obj <- matchit(period ~ age_group + gender + test_month, data = df, method = "nearest", distance = "glm", exact = c("gender", "age_group", "test_month"))
+  matched_data <- match.data(match_obj)
+
+# Convert categorical variables to numeric for causal forest
+matched_data$age_group <- as.factor(matched_data$age_group)
+matched_data$age_group_numeric <- as.integer(matched_data$age_group)
+
+matched_data$gender <- as.factor(matched_data$gender)
+matched_data$gender_numeric <- as.integer(matched_data$gender)
+
+
+matched_data$test_month <- as.numeric(as.character(matched_data$test_month))
+
+# Convert period to a binary treatment indicator
+matched_data$treatment <- ifelse(matched_data$period == "D", 1, 0)
+
+# Run causal forest model
+causal_forest_model <- causal_forest(
+  X = matched_data[c("age_group_numeric", "gender_numeric", "test_month")], 
+  Y = matched_data$combined_value, 
+  W = matched_data$treatment, 
+  num.trees = 2000
+)
+
+# Estimate the average treatment effect (ATE)
+ate <- average_treatment_effect(causal_forest_model)
+print(ate)
+
+# Calculate the percentage change
+ate_estimate <- ate[1]
+ate_standard_error <- ate[2]
+average_combined_value <- mean(matched_data$combined_value)
+
+percentage_change <- (ate_estimate / average_combined_value) * 100
+print(paste("Percentage change due to pandemic:", round(percentage_change, 2), "%"))
+```
