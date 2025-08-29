@@ -1,0 +1,1067 @@
+\documentclass[12pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+
+\usepackage[compress]{cite}
+\bibliographystyle{naturemagnourl}
+
+\usepackage{IEEEtrantools,stackengine}
+\stackMath
+
+\usepackage[title]{appendix}
+\usepackage{authblk}
+\usepackage{fullpage}
+\usepackage{amssymb,amsmath}
+\usepackage{adjustbox}
+\usepackage{graphicx}
+\usepackage{longtable}
+\usepackage[table,xcdraw]{xcolor}
+\usepackage{amsmath}
+\usepackage{subcaption}
+
+
+\usepackage{siunitx}
+  \sisetup{
+    group-separator = {,},
+    group-minimum-digits = 4,
+    detect-all,
+    detect-weight=true,
+    detect-family=true,
+    mode=text
+  }
+
+\usepackage{csquotes}
+\usepackage{xcolor}
+\usepackage{xspace}
+\newcommand\ie{i.\,e.\xspace}
+\newcommand\eg{e.\,g.\xspace}
+\newcommand\Eg{E.\,g.\xspace}
+\newcommand\NB{N.\,B.\xspace}
+\newcommand\BSc{B.\,Sc.\xspace}
+\newcommand\MSc{M.\,Sc.\xspace}
+\newcommand\PhD{Ph.\,D.\xspace}
+\newcommand\etc{etc.\xspace}
+\newcommand\resp{resp.\xspace}
+\newcommand\cf{cf.\xspace}
+\newcommand\Cf{Cf.\xspace}
+\newcommand\cp{cp.\xspace}
+\newcommand\etal{et\,al.\xspace}
+\newcommand\page[1]{p.\,#1}
+\newcommand\pages[1]{pp.\,#1}
+\newcommand\pa{p.\,a.\xspace}
+\newcommand\ham{a.\,m.\xspace}
+\newcommand\hpm{p.\,m.\xspace}
+\newcommand\UK{U.\,K.\xspace}
+\newcommand\US{U.\,S.\xspace}
+\newcommand\wlogenerality{w.\,l.\,o.\,g.\xspace}
+
+\DeclareMathOperator{\logit}{logit}
+
+\newcommand\abs[1]{\left| #1 \right|}
+\newcommand{\norm}[1]{\left\lVert#1\right\rVert}
+
+% Tables
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{multirow}
+
+% Colors
+\usepackage[dvipsnames, table]{xcolor}
+
+
+% Adding line numbers
+\usepackage[left]{lineno}
+\renewcommand\linenumberfont{\normalfont\tiny}
+
+
+% Define TODO function
+\newcommand{\TODO}[1]{{\color{red}#1}}
+\newcommand{\MOVE}[1]{{\color{orange}#1}}
+\newcommand{\INSERT}[1]{{\color{orange}#1}}
+\definecolor{darkgreen}{rgb}{0.0, 0.5, 0.0}
+\newcommand{\FIX}[1]{{\color{darkgreen}#1}}
+\definecolor{lightorange}{HTML}{FFE699}
+\definecolor{red_revision}{HTML}{FF0000}
+
+\usepackage{setspace}
+\doublespacing
+
+\usepackage[unicode=true]{hyperref}
+\hypersetup{breaklinks=true,
+%            bookmarks=true,
+%            colorlinks=true,
+            pdfborder={0 0 0},
+            allcolors=black}
+\urlstyle{same} % don't use a different (monospace) font for urls
+
+\usepackage[%
+  %capitalize,
+  sort&compress
+]{cleveref}
+  \Crefname{appendix}{Supplement}{Supplements}
+  \Crefname{figure}{Figure}{Figure}
+
+\usepackage{times}
+\usepackage{enumerate}
+\usepackage{enumitem}
+\usepackage{float}
+
+\setcounter{secnumdepth}{5}
+
+% Figure and Tables related;
+\usepackage{graphicx}
+
+% Plots path
+%\graphicspath{{./Plots/}}
+
+\newcommand{\figletter}[1]{{{\fontfamily{\sfdefault}\selectfont \textbf{#1}}}}
+
+\usepackage{rotating}
+\usepackage{tabularx}
+\usepackage{dcolumn}
+\usepackage{pdflscape}
+\usepackage{rotating}
+
+\usepackage{array}
+
+% from: http://tex.stackexchange.com/questions/2441/how-to-add-a-forced-line-break-inside-a-table-cell
+\newcommand{\mcell}[2][c]{%
+  \begin{tabular}[c]{@{}#1@{}}#2\end{tabular}}
+\newcommand{\mcellt}[2][c]{%
+  \begin{tabular}[t]{@{}#1@{}}#2\end{tabular}}
+\newcommand{\lcellt}[2][l]{%
+  \begin{tabular}[t]{@{}#1@{}}#2\end{tabular}}
+
+\newcommand{\stackedcell}[2][c]{%
+  \begin{tabular}[#1]{@{}c@{}}#2\end{tabular}}
+
+%% run: bibtex.exe "S"
+%\usepackage[resetlabels,labeled]{multibib}
+%%\usepackage[resetlabels,labeled]{multibib}
+%\newcites{S}{References}
+%\crefname{Ssec}{References}{References}
+
+%\usepackage{sectsty}
+%  \subsubsectionfont{\normalfont\itshape}
+
+\usepackage{titlesec}
+
+% Redefining subsubsection format
+\titleformat{\subsubsection}
+  {\normalfont\itshape}{\thesubsubsection}{1em}{}
+
+\titleformat{\subsection}
+  {\normalfont\bfseries}{\thesubsection}{1em}{}
+
+\makeatletter
+\renewcommand{\fps@figure}{H}         % default {tbp}
+\renewcommand{\fps@table}{H}         % default {tbp}
+\makeatother 
+
+\renewcommand{\arraystretch}{1.2}
+
+\allowdisplaybreaks
+%\hyphenation{CascadeLSTM LSTM}
+
+\usepackage{eurosym}
+\usepackage{comment}
+
+\newcommand{\REV}[1]{\textcolor{black}{#1}}
+
+
+% Hypothesis
+\usepackage{ntheorem}
+\theoremseparator{:}
+\newtheorem{hyp}{Hypothesis}
+\newtheorem*{hyp_non}{Hypothesis}
+
+\usepackage{makecell}
+
+% https://tex.stackexchange.com/questions/350394/how-to-have-separate-list-of-appendix-figures
+
+\usepackage{capt-of}
+\usepackage{tocloft}
+\usepackage{xpatch}
+
+\usepackage{hyperref}
+
+% Just in case we're not using hyperref
+\providecommand{\phantomsection}{}
+
+% Generate the separate list of commands for appendix figures and tables
+\newcommand{\listofappendixfiguresname}{\normalsize Supplementary Figures}
+\newlistof{appendixfigures}{apf}{\listofappendixfiguresname}
+\newcommand{\listofappendixtablesname}{\normalsize Supplementary Tables}
+\newlistof{appendixtables}{apt}{\listofappendixtablesname}
+
+\renewcommand{\cftafterapftitle}{\phantomsection%\addcontentsline{toc}{section}{\listofappendixfiguresname}
+}
+\renewcommand{\cftafterapttitle}{\phantomsection%\addcontentsline{toc}{section}{\listofappendixtablesname}
+}
+
+\xpretocmd{\listofappendixfigures}{}{}{}
+\xpretocmd{\listofappendixtables}{}{}{}
+
+
+\makeatletter
+\xapptocmd{\appendix}{%
+  \write\@auxout{%
+    \string\let\string\latex@tf@lof\string\tf@lof% Store the original `\tf@lof` file handle
+    \string\let\string\tf@lof\string\tf@apf% 
+    \string\let\string\latex@tf@lof\string\tf@lot% Store the original `\tf@lot` file handle
+    \string\let\string\tf@lot\string\tf@apt% 
+  }%
+}{}{}
+\makeatother
+
+\begin{document}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Title page
+
+\title{\centering\LARGE\singlespacing Monitoring changes in vitamin D levels during the COVID-19 pandemic with routinely-collected laboratory data}
+
+
+\renewcommand\Affilfont{\fontsize{9}{10.8}\selectfont}
+
+% Author names
+\author[1,2]{Lea Skapetze}
+\author[1]{Daniela Koller}
+\author[3,4]{Andreas Zwergal}
+\author[5,6]{Stefan Feuerriegel}
+\author[2,$\dagger$]{Anna Rubinski}
+\author[,1,4,$\dagger$]{Eva Grill\thanks{Corresponding author: Eva Grill (\href{mailto:Eva.Grill@med.uni-muenchen.de}{eva.grill@med.uni-muenchen.de)}}}
+
+
+
+%\affil[1]{LMU Munich, Munich, Germany}
+
+\affil[1]{Institute for Medical Information Processing, Biometry, and Epidemiology, LMU Munich, Munich, Germany}
+\affil[2]{Health Data Technologies GmbH, Neckarsulm, Germany}
+\affil[3]{Department of Neurology, LMU University Hospital, LMU Munich, Munich, Germany}
+\affil[4]{German Center for Vertigo and Balance Disorders (DSGZ), LMU University Hospital, LMU Munich, Munich, Germany}
+\affil[5]{LMU Munich School of Management, LMU Munich, Munich, Germany}
+\affil[6]{Munich Center for Machine Learning, Munich, Germany}
+\affil[$\dagger$]{Anna Rubinski and Eva Grill contributed equally as senior authors.}
+
+\date{}
+
+\maketitle
+
+\newpage
+\linenumbers
+
+\begin{abstract}
+Vitamin D is critical for bone health and immune function, but the COVID-19 pandemic, characterized by lockdowns and reduced outdoor activity, raised concerns about potential declines in vitamin D levels due to dietary changes and limited sunlight exposure. In this study, we analyzed routinely-collected laboratory data ($N=$ 292,187 patients) from a large laboratory chain in Bavaria, Germany, to assess changes in vitamin D levels before (March 2018 to February 2020) and during (March 2020 to February 2022) the pandemic. Different statistical approaches (i.e., descriptive statistics, propensity score matching, and a causal forest) were used to evaluate confounder-adjusted changes in vitamin D levels and deficiency rates. Mean vitamin D levels decreased significantly from 26.7 µg/l pre-pandemic to 26.0 µg/l during the pandemic ($p$-value < 0.001), with a corresponding increase in deficiency rates from 31.2\% to 35.2\% ($p$-value < 0.001). Across all statistical approaches, the decline in mean levels and the increase in deficiency rates were particularly pronounced among elderly women. These findings highlight the importance of public health strategies to monitor and improve vitamin D status, especially during periods of restricted outdoor activity.
+\end{abstract}
+
+
+\flushbottom
+\maketitle
+\thispagestyle{empty}
+
+
+\sloppy
+\raggedbottom
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\newpage
+\section*{Introduction}
+\label{sec:introduction}
+
+The COVID-19 pandemic, starting in 2020, had a major global impact that extends beyond its direct effects on health. In particular, non-pharmaceutical interventions such as lockdowns restricted outdoor activities \cite{Hsiang2020, Persson2021} and limited sunlight exposure, which raises concerns about potential declines in vitamin D levels. In addition, such interventions affected various aspects of well-being, including weight fluctuations due to changes in dietary behaviors \cite{Rousham2024, Bhutani2021}. One notable consequence has been an increase in nutrient deficiencies as a result of these dietary changes \cite{Antwi2021}. Among the nutrients relevant to maintaining overall health, vitamin D plays an important role, particularly for bone health, immune function, and inflammation \cite{Holick2011, Aranow2011, BischoffFerrari2004}. Further, vitamin D acts as an immunomodulatory hormone, which regulates both the innate and adaptive immune systems \cite{Charoenngam2020,Bikle2009,Aranow2011}. Emerging evidence suggests that vitamin D deficiency in COVID-19 individuals was associated with prolonged mechanical ventilation and worse outcomes \cite{Notz2022}. However, comprehensive evidence of changes in vitamin D levels during the COVID-19 pandemic is missing.
+
+In this study, our objective was to analyze changes in vitamin D levels during the COVID-19 pandemic (see Figure~\ref{fig:overview}). For this, we used routinely-collected, real-world data from a database \cite{honic} that was extracted from laboratory information systems. Our study comprised a large study population of $N=$ 292,187 individuals from Bavaria, Germany, and spanned two distinct periods: a pre-pandemic period (March 2018 to February 2020) and a pandemic period (March 2020 to February 2022). The study population reflects a comprehensive population, encompassing both inpatient and outpatient settings, individuals from all health insurance types, and a wide range of practitioner types, including general practitioners, specialists, and hospital-based physicians. The broad inclusion criteria in this study ensure that our findings are representative of real-world healthcare interactions across diverse demographic and clinical subgroups. By employing multiple methods for analysis including propensity score matching (PSM) and a causal forest model \cite{Athey2019, Wager2018}, we quantified confounder-adjusted changes in mean vitamin D levels and deficiency rates across different seasons, stratified by age and gender. Our findings highlight the value of monitoring nutrients, specifically levels of vitamin D on a large population-wide scale for public health policy.
+
+Monitoring vitamin D levels using routinely-collected laboratory data offers several advantages. First, combining data from multiple laboratories in near real-time provides a comprehensive, population-wide assessment of vitamin D status and thus allows for granular analyses that can be stratified by sociodemographics such as age and gender. Second, by drawing from diverse population groups, real-world data (RWD) reduces the risk of selection bias and ensures findings have high external validity, which is critical for generalizability in clinical research \cite{Saesen2023}. Third, routinely-collected laboratory data allow for tracking vitamin D levels over time, helping to identify trends and seasonal variations. The importance and benefits of using RWD for medical research have been discussed previously \cite{Booth2019,Hong2021}, while actual studies with empirical evidence are comparatively rare. With this study, we aimed to add empirical evidence by showing the value of routinely-collected laboratory data for monitoring nutrient changes, in particular, vitamin D deficiencies.
+
+\clearpage
+
+%\thispagestyle{empty}
+
+\section*{Results}
+\label{sec:results}
+
+
+\subsection*{Study population}
+
+We conducted a retrospective analysis using routinely-collected laboratory data from the Honic data platform \cite{honic}. individuals were included in the current study if they underwent vitamin D testing for the first time at any point during the study period with subsequent tests excluded from the analysis (see Figure~\ref{fig:patient_flowchart}). Vitamin D levels were measured as 25-Hydroxyvitamin~D (25-OH-D) in serum in µg/l  \cite{Rabenberg2018}.  The final study population consisted of $N=$ 292,187 individuals, which we split into the pre-pandemic period defined as March 2018 to February 2020 ($N_\text{pre} =$ 153,829) and the pandemic period defined as March 2020 to February 2022 ($N_\text{during} =$ 138,358) period. The definition of pre-pandemic and pandemic period follows the official declaration of the World Health Organization \cite{who},  encompassing a total of four years overall with 24 months per period, providing sufficiently long observation periods of equal lengths to both account for seasonal variations and enable a robust comparison. 
+
+Individuals in the pandemic group were younger (age group 18--39 years: 27.4\% vs. 22.9\%) and had a slightly lower percentage of women (64.3\% vs. 63.5\%). Further details about Study population characteristics are presented in Table~\ref{tab:patient_characteristics}.
+
+
+
+\subsection*{Changes in vitamin D levels and deficiency rates during the pandemic}
+
+% INTRO AND DESCRIPTIVE
+
+Differences in vitamin D health status between pre-pandemic and pandemic periods were assessed for two different outcomes, namely, changes in mean serum level and changes in deficiency rates, defined as serum levels below 20 µg/l \cite{Holick2011}. For this, three different statistical methods were used, namely, descriptive analyses, propensity score matching, and a causal forest. Overall, the mean pre-pandemic vitamin D level was 26.7 µg/l (standard deviation [SD]: 12.8), while the mean level during the pandemic was 26.0 µg/l (SD: 13.4) (Table~\ref{tab:results_stat_level_mean}; \REV{see Supplementary~Table~\ref{tab:results_stat_level_median} for median and interquartile range}), which corresponds to a reduction of 0.7 µg/l or 2.6\% ($p$ < 0.001). Similarly, vitamin D deficiency rates increased significantly from 31.2\% pre-pandemic to 35.2\% during the pandemic ($p$ < 0.001) (Table~\ref{tab:results_stat_deficiency_rate}). 
+
+
+\subsection*{Heterogeneity in vitamin D level changes across subpopulations}
+
+Here, we analyze heterogeneity across different age groups, genders, and all four seasons. Details are presented in Table~\ref{tab:results_stat_level_mean} (for vitamin D levels) and Table~\ref{tab:results_stat_deficiency_rate} (for vitamin D deficiency rates). \REV{Differences in vitamin D levels and deficiency rates between groups were statistically tested using $t$-tests and $\chi^2$-tests, respectively.}
+
+\textbf{Age.} Vitamin D levels and deficiency rates were analyzed across three age groups, namely, 18--39, 40--59, and 60+ years. All age groups showed a consistent, statistically significant decrease in mean vitamin D levels and an increase in deficiency rates, though the magnitude of change varied by age group. During the pandemic, the age group 18--39 years had a slightly smaller decline of mean vitamin D levels (from 25.4 µg/l to 24.9 µg/l, $p < 0.001$) compared to the other age groups (40--59 years: 26.7 µg/l to 26.1 µg/l, $p < 0.001$). In contrast, the age group 18--39 years had a stronger increase in vitamin D deficiency rates (from 34.6\% to 37.8\%, $p < 0.001$) compared to the other age groups. 
+
+\textbf{Gender.} Women had higher mean vitamin D levels compared to men both pre-pandemic (27.5 µg/l vs. 25.2 µg/l, $p < 0.001$) and during the pandemic (26.7 µg/l vs. 24.7 µg/l, $p < 0.001$). The decrease in mean vitamin D levels was larger for women than for men ($-$0.8 µg/l for women vs. $-$0.5 µg/l for men, $p < 0.001$). For men, the vitamin D deficiency rate was higher both pre-pandemic (36.1\% vs. 28.5\%, $p < 0.001$) and during the pandemic (39.8\% vs. 32.6\%, $p < 0.001$). Older women had the largest decrease in mean vitamin D levels and the largest increase in vitamin D deficiency rates compared to all other age/gender subgroups (see Figure~\ref{fig:before_during}).
+
+\textbf{Seasons.} To account for the natural seasonal fluctuation, the role of seasonality was analyzed additionally. A decline in mean vitamin D levels and an increase in deficiency rates were found across all seasons, yet with varying magnitudes. During the pandemic, a large decline in mean vitamin D levels was observed for spring (from 26.2 µg/l to 23.9 µg/l, $p < 0.001$), followed by winter (from 24.5 µg/l to 23.8 µg/l, $p < 0.001$). Similarly, deficiency rates were largest in spring (from 35.7\% to 44.0\%, $p < 0.001$), followed by winter (from 41.0\% to 44.3\%, $p < 0.001$). Further details are shown in Figure~\ref{fig:before_during} and Supplementary Figure~\ref{suppfig:seasons}.
+
+
+    \subsection*{Confounder-adjusted reductions due to the pandemic} 
+
+% PSM
+
+To account for potential confounding factors such as age, gender, and seasonality, two additional methods were used (Figure~\ref{fig:effect_sizes}). First, a PSM analysis \cite{Rosenbaum1983} was performed. \REV{By performing exact matching of individuals from the pre-pandemic and pandemic periods based on the combination of age, gender, and test month,} the PSM method allows to reduce confounding such as due to selection bias and thus improve between-group comparability. The PSM-adjusted analysis showed a significant decrease in mean vitamin D levels from 26.5 µg/l (SD: 12.7) pre-pandemic to 26.0 µg/l (SD: 13.4) during the pandemic (Supplementary Table~\ref{supptab:results_psm}). This corresponds to a reduction in mean vitamin D levels of 0.5 µg/l, that is, 1.9\% ($p$ < 0.001). Vitamin D deficiency rates similarly increased from 31.6\% pre-pandemic to 35.2\% during the pandemic ($p$ < 0.001) (Supplementary Table~\ref{supptab:results_psm}). The standardized mean difference (SMD) for the effect size based on the PSM analysis was $-0.0388$ for the confounder-adjusted reduction in mean vitamin D levels and $0.0762$ for the confounder-adjusted increase in vitamin D deficiency rate (see Figure~\ref{fig:effect_sizes}).
+
+%ML
+Additionally, a causal forest model \cite{Athey2019,Wager2018} was used as a machine learning method to estimate the confounder-adjusted impact of the pandemic on vitamin D levels. The causal forest is a state-of-the-art machine learning method for quantifying confounder-adjusted changes in an outcome variable due to intervention. In our study, we used the method to estimate the effect of the pandemic on vitamin D levels, while controlling for age, gender and season. The causal forest estimated a confounder-adjusted mean reduction in vitamin D levels of $-0.678$ µg/l ($-2.54$\%) with a 99\% confidence interval of $-0.8019$ µg/l to $-0.554$ µg/l as well as a confounder-adjusted vitamin D deficiency rate increase of $0.0408$ or $4.08$\% with a 99\% confidence interval of $0.0364$ to $0.0453$.
+
+
+Figure~\ref{fig:effect_sizes} shows that the confidence intervals of the different methods overlap, which underscores the reliability of the confounder-adjusted estimates. Thus, all three methods applied in this study -- descriptive statistics, PSM, and ML -- consistently suggest a negative effect of the pandemic on vitamin D levels and a positive effect on vitamin D deficiency rates, with comparable effect sizes. We also conducted a sensitivity analysis to make sure our conclusions regarding the effect of the COVID-19 pandemic on vitamin D levels are robust to other potential sources of unobserved confounding (see Supplement~\ref{supp:sensitivity_analysis} for details), finding that it is unlikely that the reduction can be explained away by other factors. 
+
+
+
+\subsection*{Predictors of heterogeneity in vitamin D reduction}
+
+To understand how the effects of the pandemic on vitamin D levels varied across different subpopulations, we analyzed the heterogeneity in the confounder-adjusted \REV{absolute} reduction of vitamin D levels (Figure~\ref{fig:results_ml}a) by computing the confounder-adjusted reduction within different subpopulations. For example, spring exhibited the largest reduction in vitamin D levels among all seasons, while the age group 18--39 years experienced the least decline compared to older groups (see Supplementary~Table~\ref{supptab:subgroups} for further results).
+
+Figure~\ref{fig:results_ml}b further reports a feature importance analysis from the causal forest model \cite{Grömping2009}. This analysis aimed to identify the factors that make the largest contribution to explaining variations in the reduction of vitamin D levels. As a result, feature importance analysis ranks covariates based on their contribution to the observed reduction \cite{Athey2019}. In the causal forest model, seasonal variation emerged as the most influential factor, accounting for 77.9\% of the variance in vitamin D levels, followed by the covariates representing the age groups (14.2\%) and gender (7.8\%).
+
+
+
+\subsection*{\REV{Robustness checks}}
+
+\REV{We conducted three additional analyses as robustness checks to strengthen the public health evidence generated from monitoring population-wide vitamin D levels from routinely-collected laboratory data: (1)~We performed a regression analysis to link the pandemic to changes in serum vitamin D levels and the odds of vitamin D deficiency. Here, the estimates confirm the findings from the method above (Supplement~\ref{supp:linear_logistic_regression}). (2)~We retrieved the individuals' postal codes to evaluate regional variation in outcomes. Here, we specifically assessed whether outcomes vary across individuals from different degrees of urbanization (e.g., city, rural, or suburb) (Supplement~\ref{supp:geographic_analysis}). (3)~We repeated our main analyses by replacing the seasonality dummy with a continuous time trend variable, defined as the number of months before or after the onset of the pandemic. This approach allows us to account for gradual temporal shifts rather than a discrete seasonal effect (see Supplement~\ref{supp:analysis_with_time_trend}). Again, our main findings remained consistent. (4)~We performed a within-subject longitudinal analysis on the subset of individuals with repeated measurements before and during the pandemic ($N =$ 61,393), which revealed a statistically significant mean increase in vitamin D levels during the pandemic (Supplement~\ref{supp:longitudinal_analysis}). While our main analysis showed a population-level decrease in vitamin D levels during the pandemic, this within-subject analysis may reflect improved follow-up care or targeted interventions (e.g., supplementation) in the subpopulation of individuals with multiple measurements, and thereby provides additional nuance to the overall interpretation.}
+
+\newpage
+
+\section*{Discussion}
+\label{sec:discussion}
+
+% recap: relevance / aim / p
+
+Understanding how the COVID-19 pandemic has affected changes in vitamin D levels is a crucial public health issue because of the long-lasting impact of vitamin D on bone health, immunity, and overall well-being \cite{Holick2011, Aranow2011}.  In this study, we examined the difference in vitamin D levels across pre-pandemic (defined as March 2018 through February 2020) and pandemic (defined as March 2020 through February 2022) periods. We observed lower mean vitamin D levels and higher vitamin D deficiency rates during the pandemic as compared to pre-pandemic periods. The observed difference was robust when controlling for confounding due to age, gender, and season. Several studies have shown a decrease in vitamin D levels during the pandemic phase. However, these results pertain to specific vulnerable groups such as, for example, children  \cite{Yu2020, Kilic2023, Wong2021}, young women  \cite{Tsugawa2022}, and persons with pre-existing health problems such as chronic kidney disease \cite{ParraOrtega2023} and previously known vitamin D deficiencies  \cite{Katz2021}. In contrast, we provide evidence from a large-scale, \emph{population-wide} analysis that should be representative of the broader population. The observed difference was consistent across different subpopulations stratified by age and gender. Vitamin D levels fluctuated across seasons, with pronounced seasonal patterns persisting even when overall levels declined during the pandemic. 
+
+%We confirm with our analysis of representative data on a population level that there has been an overall effect on vitamin D.
+
+% high levels of Vit D in our study
+
+Our findings reveal surprisingly high mean serum vitamin D levels compared to previous population-based studies conducted in Germany. In our study, mean pre-pandemic vitamin D levels were 26.7 µg/l (equivalent to 66.8 nmol/l) and decreased slightly during the pandemic to 26.0 µg/l (65.0 nmol/l). These values are notably higher than those reported in the German Health Interview and Examination Survey for Adults (DEGS1) \cite{Rabenberg2015}, which found an average level of 45.6 nmol/l between 2008 and 2011. Moreover, the DEGS1 survey reported that 61.6\% of individuals had levels below the 50 nmol/l threshold, which is equivalent to the 20 µg/l threshold we used in this study. The deficiency rate reported by them is substantially higher than the 31.2\% we observed pre-pandemic and the 35.2\% during the pandemic. This discrepancy could be attributed to differences in sample populations and data collection methodologies. The DEGS1 survey captured a nationally representative sample, while our data originate from individuals undergoing routine laboratory testing, potentially reflecting a population more health-conscious.  Additionally, increased public awareness of vitamin D supplementation and its health benefits over the past decade and, especially during the COVID-19 pandemic, may have contributed to higher levels in our study population \cite{Smaha2023}.
+
+% age
+We found that, across all age groups, the changes in mean vitamin D levels and deficiency rates during the pandemic were  consistent. The mean difference was in the magnitude of 0.5 µg/l, corresponding to an absolute increase in deficiency rates of about 3--4\%. Interestingly, the older age group (60+ years) exhibited higher mean vitamin D levels compared to younger adults both before and during the pandemic, a pattern contrary to expectations based on prior population-based studies \cite{Rabenberg2015}. This apparent paradox may be explained by differences in health behaviors and testing practices between age groups. Older adults are more likely to undergo regular health check-ups and may be more aware of vitamin D supplementation as a preventative measure for bone health and immunity. Table~\ref{tab:patient_characteristics} supports this interpretation, \REV{showing a lower proportion of younger adults among those tested for vitamin D, which could reflect reduced engagement with routine healthcare services in this group (but which may be partially explained by changes in the overall health state for specific subpopulations before and after the onset of the pandemic)}. The COVID-19 pandemic may have further amplified these disparities, with older adults potentially prioritizing health maintenance during a time of increased health risk \cite{Ibsen2024}. Additionally, the stronger increase in deficiency rates observed in the 18--39 age group (from 34.6\% to 37.8\%) suggests that younger adults may be more vulnerable to pandemic-related factors such as reduced outdoor activity and limited sun exposure \cite{Barber2021}. Seasonal fluctuations in vitamin D levels, although controlled for in our analysis, may also disproportionately impact younger adults who are less likely to use supplements \cite{Dickinson2014}.
+
+% gender
+Our analysis revealed that both men and women experienced a decline in vitamin D levels during the pandemic. The increase in deficiency rates before and during the pandemic was similar for both genders (i.e., about 4 percent). However, men had, in general, a higher deficiency rate than women, both before and during the pandemic. This finding contrasts with the conclusions of previous reviews about vitamin D deficiency in Europe, which reported no significant sex differences in the prevalence of vitamin D deficiency across multiple studies \cite{Cashman2016}. One potential explanation for this discrepancy is behavioral differences between genders during the pandemic. Women were more likely to use vitamin D supplements than men \cite{Dickinson2014}, which may have contributed to their overall higher mean vitamin D levels and lower deficiency rates. Additionally, it has been demonstrated that women exhibited greater health-related worries and behavioral adjustments during the pandemic compared to men \cite{Barber2021}. This heightened health awareness could have resulted in overall higher vitamin D levels in women compared to men. Interestingly, despite the higher serum levels and lower deficiency rates overall, the decline in levels during the pandemic was slightly larger for women than for men ($-$0.8 µg/l vs. $-$0.5 µg/l). This could be the result of the disproportionate effect of the pandemic on women's health, wealth, and social welfare, potentially exacerbating pre-existing gender inequalities and making women more vulnerable to health-related challenges during this period \cite{Guerrina2021}.
+
+% season
+Seasonality explained 77.9\% of the variance in COVID-19 levels (based on the feature importance analysis; Figure~\ref{fig:results_ml}a). During the pandemic, reduced outdoor activities, particularly during spring, likely contributed to lower vitamin D levels, as this period typically represents a time when vitamin D stores from winter are replenished through increased sun exposure \cite{Das2018}. Our analysis revealed that in general the most significant decline in mean vitamin D levels occurred in spring, followed by winter, as can be seen in Table~\ref{tab:results_stat_level_mean} and in Supplementary Figure~\ref{suppfig:seasons}. These findings are consistent with prior research documenting the seasonal variation in vitamin D levels, which tend to be lowest during late winter and early spring due to limited sunlight exposure \cite{Kasahara2013}.
+
+%geographical analysis
+\REV{Our data support the notion that vitamin D deficiency is more prevalent in urban populations (Supplement~\ref{supp:geographic_analysis}), which is consistent with earlier findings from the DEGS1 survey \cite{Rabenberg2015}. This pattern may be driven by environmental factors such as reduced sun exposure due to high building density, limited access to green spaces, and elevated levels of air pollution. Notably, urban air pollutants, especially tropospheric ozone, have been shown to reduce cutaneous vitamin D synthesis even in individuals with regular outdoor activity \cite{Manicourt2008}. These factors may have compounded the effects of lockdowns and mobility restrictions during the COVID‑19 pandemic, disproportionately affecting urban residents. These patterns suggest the need for more granular geographical analyses in future research to better understand how built environment and environmental exposures shape population‑wide vitamin D level.}
+
+%While our dataset does not include explicit urban–rural indicators, the postal code‑based regional variation (see \ref{supp:geographic_analysis}) shows differential deficiency rates, and suggests a need for more granular geographical analyses in future research to better understand how built environment and environmental exposures shape population‑level vitamin D status.}
+
+% rwd
+A particular strength of our analysis is the use of RWD, which allows for large-scale, population-level insights. Data from laboratory information systems is routinely collected, providing comprehensive, near real-time data that reflects real-world health behaviors and outcomes. Our study, based on data from 292,187 individuals, captures a broad spectrum of demographic groups, enabling the exploration of how environmental and social factors—such as lockdowns and restricted outdoor activities—affected vitamin D levels during the pandemic. However, it is important to acknowledge potential discrepancies between RWD and national survey data such as those from the German National Public Health Institute (RKI) \cite{rki_covid_surveys}. For example, RWD may be influenced by biases related to access to medical care and insurance status, while survey data are prone to response and selection biases. In the German healthcare system, vitamin D testing is often concentrated among older adults and women, who are more likely to engage in preventive health measures \cite{destatis_population_2024}. This may explain the overrepresentation of these groups in our dataset compared to the general population. Nevertheless, moving from impenetrable and inaccessible health data silos to health data integration is an important step for modern integrated care \cite{Schmitt2023}. Our study shows the practical value of harnessing routine data from laboratory information systems. In this vein, procedural and administrative data from primary health care can increasingly be linked across services. In addition to being medically necessary, this approach also has several distinct advantages for research \cite{Haneef2020, LeventerRoberts2017}. As such, RWD can be the basis of evidence for policy-makers and provide results with high external validity. A broad and longitudinal perspective enables the examination of the impact of policy changes or disruptive events on population health on a large scale. 
+
+% limitations
+Despite the many advantages of using routinely-collected laboratory data for monitoring population-wide vitamin D levels, our study has several limitations. First, routinely-collected data may have potential data quality concerns such as different data entry practices or inconsistencies in measurement methods. This is mitigated in our study as the data come from a leading laboratory provider with standardized measurement practices across all facilities, ensuring highly standardized and harmonized data entries. Second, the observational nature of the data limits our ability to establish direct causality between the pandemic and vitamin D deficiencies. However, we addressed this by using robust statistical methods, including confounder-adjusted estimates controlling for age, gender, and season, and by conducting a causal sensitivity analysis (see Supplement~\ref{supp:sensitivity_analysis} and Supplementary Table~\ref{supptab:sensitivity}) to confirm that our findings remain consistent even in the presence of potential unobserved confounders. Third, although our data are specific to Bavaria, the demographic and healthcare characteristics of Bavaria are broadly comparable to other regions in Germany \cite{destatis_population_2024}, suggesting that our findings may still be indicative of wider trends. Nevertheless, caution is warranted when generalizing these results to regions with different healthcare systems, climates, or population structures. Lastly, we included only male and female genders in our analysis, as entries for non-binary gender were exceedingly rare (< 0.2\%), which limited statistical power to make reliable inferences for this subpopulation. Also, it has to be pointed out that the gender indicated in our data is the administrative gender, which might not be necessarily identical to the biological sex of the individual. 
+
+\REV{Further, we acknowledge that as the data used in our study were derived from individuals undergoing routine laboratory testing rather than from a random sample of the general population, so there is the possibility of a shift in testing behavior over time. In particular, heightened public awareness of the possible role of vitamin D in immune function during the COVID-19 pandemic may have influenced who sought testing, potentially drawing a different subset of individuals to the laboratory than in the pre-pandemic period. This could have led to an overrepresentation of health-conscious individuals or those with particular health concerns or conditions related to vitamin D. Although we employed robust methods to adjust for observable differences in the population across time, unmeasured selection effects may nonetheless have influenced our results. We therefore explicitly acknowledge this source of bias as a potential limitation and encourage future research to further explore the impact of differential testing behavior during public health crises.}
+
+% implications and broader impact
+The decline in vitamin D levels during the COVID-19 pandemic has significant public health implications \cite{Weir2020}. Targeted interventions, such as promoting supplementation and regular monitoring, are crucial for vulnerable groups, including those with limited sun exposure \cite{Katz2021}. Our study highlights the value of using routinely-collected laboratory data for public health monitoring, enabling near real-time tracking of trends. These findings underscore the need to prioritize addressing vitamin D deficiency in public health strategies and suggest that other nutritional deficiencies may also require attention during health crises.
+
+\newpage
+\section*{Methods}
+\label{sec:methods}
+
+\subsection*{Study design}
+
+This retrospective analysis used routinely-collected laboratory data to analyze vitamin D levels in the Bavarian population before and during the COVID-19 pandemic. The primary objective was to evaluate population-wide changes in vitamin D levels by comparing the pandemic period as defined by the World Health Organization (WHO) \cite{who} with a pre-pandemic period of equal duration. Specifically, the pre-pandemic period was defined as March 2018 to February 2020, and the pandemic period was defined as March 2020 to February 2022. Both time periods were of equal length to ensure comparability. Our analysis focused on the overall, population-wide impact of the COVID-19 pandemic on vitamin D levels, rather than examining individuals' COVID-19 infection status.
+
+\subsubsection*{Data source}
+
+Data on vitamin D levels were extracted from the Honic data platform \cite{honic}, which provides quality-controlled, routinely-collected healthcare data from multiple sources, including laboratory reports, outpatient visits, and prescriptions. For the current study, data primarily originated from a large laboratory chain within Bavaria comprising over 10 laboratories. Data is transmitted in real time from laboratory information systems to the Honic data platform, with approximately 12,000 to 15,000 new reports added daily.  The database encompasses a highly diverse population, including individuals from both inpatient and outpatient settings, all types of health insurance, and a wide range of practitioner types, such as general practitioners, specialists, and hospital-based physicians. At the time of data extraction (03/2024), the database included over 7 million individuals, providing a comprehensive representation of real-world healthcare interactions in Bavaria.
+
+Through the Honic platform, real-world data is collected, cleaned, processed, and standardized to ensure high-quality, reliable data for analysis. The platform uses a master patient index to link patient data across sources while ensuring privacy through pseudonymization. Data access is provided within a secure analytics environment, ensuring compliance with the General Data Protection Regulation (GDPR) in the European Union and other data protection regulations.
+
+\subsubsection*{Data extraction}
+
+All available 25-hydroxy vitamin D measurements taken during the defined time frames were extracted from the Honic data platform for this study. To maintain consistency, only the first available vitamin D measurement per individual within the study period was included, focusing on baseline levels and minimizing potential confounding due to treatment or seasonal variations from repeat measurements. Additional variables such as age, gender, postal codes, and season were also extracted.
+
+\subsubsection*{Inclusion criteria}
+
+Individuals were required to have at least one vitamin D measurement within the specified time frames, as well as the following criteria: (1)~\emph{Age}: Adults 18 years and older at the time of vitamin D measurement. (2)~\emph{Residence}: Individuals residing in Bavaria, defined by postal codes beginning with 60 or ranging from 80 to 97, to ensure a regionally homogeneous sample. (3)~\emph{Administrative gender}: Male or female individuals. (4)~\emph{Vitamin D measurement}: Individuals with at least one valid value. Figure~\ref{fig:patient_flowchart} shows a detailed overview of the selection criteria for the study population.
+
+\subsection*{Data processing}
+
+Prior to analysis, the extracted data was processed and anonymized to ensure data security and regulatory compliance. For this, variables that were redundant for the purpose of our analysis were removed, age was aggregated into age groups to reduce the risk of re-identification, \REV{postal codes were aggregated to degree of urbanization}, and any specific identifiers were removed. As part of the latter step, postal codes (after applying the selection criteria), precise dates (retaining only month and year), and extreme outliers (that could lead to re-identification) were removed. A re-identification risk assessment was conducted on the remaining attributes, and $k$-anonymity (with $k=5$) was applied to quasi-identifiers. Anonymization was performed using ARX version 3.9.1 \cite{Prasser2014}. The final dataset was formatted as a CSV file and transferred to a secure R server for analysis.
+
+\subsection*{Ethics approval}
+
+The data request underwent a comprehensive assessment by an external compliance board, including patient and scientific representatives, to ensure the project met the ethical and legal standards required for using Honic data. This study received an Institutional Review Board exemption from the Ethics Committee of the Medical Faculty of LMU Munich (4-0900-KB). 
+
+ 
+\subsection*{Measures}
+
+Vitamin D was assessed through serum levels of 25-hydroxy vitamin D (25-OH-D), the standard biomarker for evaluating vitamin D status in clinical and research settings. This biomarker is preferred because it reflects both dietary intake and endogenous production from sunlight exposure. Serum 25-OH-D concentrations were measured using immunoassays, a widely used method in routine laboratory diagnostics \cite{Rabenberg2018, Fraser2020}. Vitamin D levels below 4 µg/L or above 300 µg/L were recorded as `<4 µg/L' or `>300 µg/L', respectively, representing the assay's detection limits. Since exact values could not be extrapolated for these cases, individuals with such recordings were excluded from the mean vitamin D levels analyses (0.4\% excluded) but retained for deficiency rate calculations. According to widely accepted guidelines, a serum 25-OH-D level below 20 µg/l (50 nmol/l) was defined as vitamin D deficiency \cite{Holick2011, Pludowski2013}. Outliers (\REV{values > 70 µg/l, corresponding to 0.96\% of the data}) were removed only for plotting to enhance visualization and prevent extreme values from distorting the scales. However, all statistical analyses, including group means and significance tests, were conducted on the full dataset to ensure the results remain representative of the population. The seasonal patterns of vitamin D levels over time are shown in Supplementary Figure~\ref{suppfig:over_time}. \REV{A comparison between vitamin D levels during early vs. late stages of the pandemic further revealed no substantial difference (Supplementary Figure~\ref{suppfig:eary_late_pandemic}).} 
+
+We further use the following covariates to account for different sources of heterogeneity. (1)~\emph{Age:} The age of individuals was calculated at the measurement date and pre-grouped into three categories: 18--39 years, 40--59 years, and 60+ years. (2)~\emph{Gender:} The administrative gender was coded as male or female, individuals with unknown gender were excluded from the analysis. (3)~\emph{Season:} Seasons were categorized as follows: winter (December, January, and February), spring (March, April, and May), summer (June, July, and August), and fall (September, October, November).
+
+\subsection*{Statistical analysis}
+
+\REV{For comparisons of continuous variables between groups (e.g., vitamin D levels before and during the pandemic), we applied two-sided \textit{Wilcoxon rank-sum tests} (\texttt{wilcox.test} in R) when normality assumptions were not satisfied, and two-sided \textit{t-tests} (\texttt{t.test}) otherwise. Comparisons of categorical variables (e.g., gender or age group distributions) were performed using two-sided $\chi^2$-tests (\texttt{chisq.test}). All null hypothesis tests were conducted two-sided. Effect sizes from regression models are reported as standardized or unstandardized regression coefficients ($\beta$) with corresponding confidence intervals, p-values, and degrees of freedom where applicable. Degrees of freedom for $t$- and $F$-statistics correspond to the residual degrees of freedom from the respective models. Confidence intervals were reported at the 99\% level. A significance threshold of $\alpha = 0.01$ was applied throughout our analysis.}  
+The statistical tests allow for comparisons at the population level but do not account for potential differences in individual characteristics between the periods. Therefore, we employed two additional methods to make comparisons: (1)~propensity score matching and (2)~a causal forest model. These methods were specifically designed to reduce bias arising from differences in individual characteristics across the two populations and thus yield confounding-adjusted estimates.
+
+\subsubsection*{Propensity score matching}
+
+PSM \cite{Rosenbaum1983} was performed using a logistic regression model to estimate propensity scores, \REV{with the combination of age group, gender, and test month included as covariates}. Nearest neighbor matching was applied, ensuring exact matches for gender, age group, and test month to create comparable pre-pandemic and pandemic groups. Test month was chosen as a covariate instead of season because it provides finer granularity in capturing potential seasonal effects and better aligns with the temporal distribution of laboratory data. After matching, the original sample of 292,187 observations was reduced to 267,378 matched observations, resulting in a loss of 25,413 records (8.7\%). This matching procedure achieved strong balance across most covariates, with standardized mean differences (SMDs) falling below the recommended threshold of 0.1 for the majority of variables. Two covariates exhibited slightly higher SMDs ($-$0.1200 for the test month of April and 0.1024 for the age group 18--39), which are marginal deviations from the threshold. These slight imbalances are unlikely to substantially affect the comparability of the matched groups \cite{Stuart2010}. By matching study populations in this manner, inferences can be drawn by comparing the intervention group (i.e., individuals tested during the pandemic) with the matched control group (i.e., individuals tested before the pandemic)  \cite{Shah2005}. See Supplementary Table~\ref{supptab:results_psm} for more details on the population characteristics after matching. \REV{After PSM, adjusted comparisons were conducted directly within the matched sample without fitting an additional regression model. Specifically, we compared mean vitamin D levels between periods using independent sample $t$-tests and compared vitamin D deficiency rates using $\chi^2$-tests.}
+
+\subsubsection*{Causal forest}
+
+We further employed the causal forest model, a nonparametric state-of-the-art machine learning method  \cite{Athey2019, Wager2018, Feuerriegel2024}. The causal forest aims at estimating heterogeneous treatment effects and is thus well-suited for our task. First, causal forests share many favorable properties with random forests in that they are expressive, require little tuning, and have a low risk of overfitting, which often leads to a robust performance in practice. Second, under common mathematical assumptions, causal forests have been shown to be pointwise consistent for the true treatment effect and therefore lead to provably valid inferences \cite{Wager2018}. Third, the causal forest makes few parametric assumptions of the form of the heterogeneous treatment effect and can thus model non-linear relationships, even in the presence of high-dimensional covariates, and typically offers better statistical power than other estimators.  
+
+The causal forest extends the traditional random forest \cite{Breiman2001} by estimating changes in an outcome variable due to an intervention, while controlling for other observed confounders (here: age, gender, and season). The causal forest proceeds by first building an ensemble of decision trees to model the relationship between intervention, outcome, and covariates. For each tree, it splits the data recursively into subgroups based on covariates, so that heterogeneity in the change of the outcome variable due to the intervention is discovered. To avoid overfitting and ensure unbiased estimates, causal forests use a technique called ``honesty'' \cite{Wager2018}, where one part of the data is used to determine the splits (i.e., how to group similar individuals) and where another part of the data is used for estimating the changes in the outcome variable. 
+
+The causal forest model was estimated for both outcomes of interest, namely, changes in vitamin D levels and vitamin D deficiency rates. The following covariates were used: age, gender, and season. Here, season was chosen over test month in the machine learning analysis as it captures broader environmental and behavioral patterns influencing vitamin D levels, while reducing potential noise from month-to-month variations. The causal forest model was run with the default parameter of 2,000 trees \cite{grfpackage}, ensuring sufficient depth and robustness in estimating heterogeneous treatment effects. All other hyperparameters were set to their default values as in \cite{grfpackage}.
+
+To validate the ignorability assumption, we applied balance diagnostics by checking the weighted absolute standardized mean difference (ASMD) for the three key covariates (age group, gender, and test month) between the pre-pandemic and pandemic study populations. A value close to 0 indicates that the propensity scores are well-calibrated. In our analysis, all ASMD values were well below the recommended 0.1 threshold, confirming a strong balance between groups. For further details, see Supplementary Table~\ref{supptab:ignorability}.
+
+\subsubsection*{Comparison of statistical methods}
+
+To systematically compare the estimated confounder-adjusted reductions, we proceeded as follows. We use  Cohen's $d$ \cite{Cohen1988} for descriptive statistics, the standardized mean difference (SMD) \cite{Higgins2011} for PSM, and the average treatment effect as provided by causal forest. Since Cohen's $d$ and SMD are standardized measures, while the ATE is not, we re-transformed Cohen's $d$ and SMD into the same scale as the ATE to allow for comparability. 
+
+\subsubsection*{Subgroup analysis}
+
+To understand the variability in vitamin D levels across different subpopulations, we performed a subgroup analysis by evaluating the estimated changes within specific subgroups defined by age, gender, and season. First, we categorized the individuals into predefined subgroups: three age groups (i.e., 18--39, 40--59, 60+), two gender groups (i.e., women, men), and four season groups (i.e., winter, spring, summer, fall). We then ran a separate causal forest model for each subgroup. For each subgroup, we reported the estimated confounder-adjusted reduction in the outcome variable together with 99\% and 95\% confidence intervals (CI) and the percentage change relative to the average value across all individuals. 
+
+\subsubsection*{Robustness checks}
+
+To verify the robustness of our findings, we performed a series of robustness checks. First, we tested alternative time frames for the pre-pandemic and pandemic periods. The original analysis (March 2018 -- February 2020 vs. March 2020 -- February 2022) showed a mean vitamin D reduction of $-0.7$~µg/l and a deficiency rate increase of $+4.0\%$ (descriptive), with PSM-adjusted values of $-0.5$~µg/l and $+3.6\%$. Adjusting the pre-pandemic period to end in January 2020 (i.e., March 2018 -- January 2020) and including February 2020 in the pandemic period yielded only a slightly larger difference ($-0.9$~µg/l, $+4.9\%$), while PSM estimates remained unchanged ($-0.5$~µg/l, $+3.6\%$). Also, adjusting the pre-pandemic period to include March 2020 (i.e., March 2018 -- March 2020) resulted in consistent findings ($-0.6$~µg/l, $+3.2\%$; PSM: $-0.5$~µg/l, $+3.3\%$). 
+
+Second, we restricted the analysis to the months of March, April, and May in 2018, 2019, 2020, and 2021. This analysis confirmed the reduction in mean vitamin D levels ($-2.3$~µg/l) and the increase in deficiency rates ($+4.3\%$). This is further corroborated by the PSM-adjusted estimates, which compute to $-1.6$~µg/l and $+6.2\%$, respectively. When restricting the data to the above-defined months, the causal forest estimated a reduction of $-2.042$~µg/l, corresponding to an $-8.1\%$ decline during the pandemic compared to the pre-pandemic period. Together, the checks help rule out that the reductions rely on the specific choice of a month/season. 
+
+Third, we incorporated hours of sunshine (taken from \cite{DWD}) as an additional covariate. Note that, due to the variation in the sunshine hours at the monthly level, it was not possible to perform PSM with exact matching, and, instead, we focused on the causal forest. The confounder-adjusted model estimated a reduction of $-6.45$~µg/l, indicating an even stronger decreasing in vitamin D levels during the pandemic, showing that the observed decline was not solely driven by seasonal sunlight variations. 
+
+Fourth, to test for unmeasured confounding, we conducted a negative control outcome analysis \cite{Lipsitch2010}, which involves selecting an outcome that should not be affected by the intervention, given proper adjustment for confounders. Due to the absence of other variables that could act as such interventions, we randomly shuffled the outcome variable (i.e., vitamin D values) within the dataset and then repeated all analyses. As expected, this yielded no meaningful differences between the pre-pandemic and pandemic periods (descriptive: $-0.1$~µg/l, $+0.1\%$; PSM: $-0.1$~µg/l, $+0.1\%$;; ML: ATE $-0.0781$~µg/l). Hence, the results reveal no significant association between intervention and negative outcome, indicating that unmeasured confounding was unlikely to bias the findings.
+
+
+\subsubsection*{Software}
+
+All statistical analyses were performed using the statistical software R (version 4.4.1) \cite{rsoftware}. For PSM, we use the \texttt{matchit} function from the package \texttt{MatchIt} (version 2.3.2) \cite{Ho2011}. For the causal forest, we used the package \texttt{grf} (version 4.5.5) \cite{grfpackage}. For the sensitivity analysis, we used the package \texttt{sensemakr} (version 0.1.6) \cite{Cinelli2020}.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\newpage
+\section*{Data availability}
+The data used in this study were licensed from Health Data Technologies GmbH ("Honic") and are subject to contractual restrictions. The de-identified patient-level data cannot be shared due to patient privacy consideration and licensing agreements. In accordance with the license agreements, access may be granted for the purpose of reviewing the study within a secure analytics environment, interested researchers may request access by contacting Honic (\href{https://honic.eu/en/contact-0}{https://honic.eu/en/contact-0}). Requests will typically be reviewed within approximately 4-8 weeks. In accordance with data-sharing policies, only aggregated data can be made publicly available. For each figure, the corresponding aggregated data are provided in the source data file, with patient-level data reported exclusively as summary statistics. 
+
+
+\vspace{0.4cm}
+\section*{Code availability}
+The R code used for the main analysis is available at the public GitHub repository 
+\url{https://github.com/leaskapetze/vitamind_covid} (DOI: \href{https://doi.org/10.5281/zenodo.16980785}{10.5281/zenodo.16980785}).
+
+\newpage
+\bibliography{literature}
+
+\newpage
+\section*{Acknowledgments}
+We thank our partner company Health Data Technologies GmbH ("Honic") for their collaboration and the expertise provided to the authors. 
+
+\vspace{0.4cm}
+\section*{Author contributions}
+L.S.: Study concept and design, data processing, statistical analysis, interpretation of the results, writing the manuscript. D.K.: Study concept and design, critical review of the manuscript. A.Z.: Critical revision of the manuscript. S.F.: Study concept and design, interpretation of the results, writing the manuscript. A.R.: Study concept and design, data processing, statistical analysis, interpretation of the results, writing the manuscript. E.G.: Study concept and design, interpretation of the results, writing the manuscript.
+
+\vspace{0.4cm}
+\section*{Competing interests}
+L.S. and A.R. are employed by Health Data Technologies GmbH ("Honic"), the data platform that provided access to the data used in this study. 'The remaining authors declare no competing interests.
+\newpage
+\vspace{0.4cm}
+
+\section*{Tables}
+\vspace{0.4cm}
+\begin{table}[h!]
+    \centering
+    \arrayrulecolor{orange}
+\caption{\textbf{Study cohort characteristics.} Statistical comparisons of individual characteristics are based on two-sided Pearson $\chi^2$-tests for categorical variables and two-sided Welch's $t$-tests for all numerical variables. No multiple comparison adjustment. SD: standard deviation.} 
+\label{tab:patient_characteristics}
+\footnotesize
+    \begin{tabular}{|l|r|r|c|}
+    \hline
+    \rowcolor{orange!20}& \textbf{Pre-pandemic} & \textbf{Pandemic} & \textbf{$p$-value}\\ \hline 
+    \rowcolor{orange!20}& (\textit{N}=153,829)& (\textit{N}=138,358)&  \\ \hline
+    \multicolumn{4}{|l|}{\textbf{Age, years (\textit{N}, [\%])} } \\\hline
+    18--39 & 35,184 [22.9]& 37,952 [27.4]& $p = 2.09 \times 10^{-177}$\\ \hline
+    40--59 & 57,306 [37.3]& 50,265 [36.3]& $p = 2.38 \times 10^{-7}$\\ \hline
+    60+ & 61,339 [39.9]& 50,141 [36.2]& $p = 1.09 \times 10^{-90}$\\ \hline
+    \multicolumn{4}{|l|}{\textbf{Gender (\textit{N}, [\%])} } \\ \hline
+    Female& 98,910 [64.3]& 87,801 [63.5]& $p = 2.40 \times 10^{-6}$\\ \hline 
+    Male& 54,919 [35.7]& 50,557 [36.5]& $p = 2.40 \times 10^{-6}$\\ \hline
+ \multicolumn{4}{|l|}{\textbf{Season (\textit{N}, [\%])} } \\ \hline 
+ Winter (Dec -- Feb)& 36,661 [23.8]& 36,320 [26.3]& $p = 2.25 \times 10^{-51}$\\ \hline 
+ Spring (Mar -- May)& 44,380 [28.9]& 32,135 [23.2]& $p = 3.28 \times 10^{-261}$\\ \hline 
+ Summer (Jun -- Aug)& 33,474 [21.8]& 32,405 [23.4]& $p = 7.78 \times 10^{-27}$\\ \hline 
+ Fall (Sep -- Nov)& 39,314 [25.6]& 37,498 [27.1]& $p = 2.70 \times 10^{-21}$\\ \hline
+    \multicolumn{4}{|l|}{\textbf{Outcomes}} \\ \hline
+    {Vitamin D levels, in µg/l (mean, [SD])} & 26.7 [12.8] & 26.0 [13.4]& $p = 2.34 \times 10^{-47}$\\ \hline
+    {Vitamin D deficiency rate (\textit{N}, [\%])} & 48,056 [31.2]& 48,692 [35.2]& $p = 9.84 \times 10^{-114}$\\ \hline
+    \end{tabular}
+\end{table}
+
+
+\vspace{0.4cm}
+\begin{table}[h]
+    \centering
+    \arrayrulecolor{orange}
+\caption{\textbf{Vitamin D levels (mean and standard deviation).} Comparison of mean vitamin D levels in serum (in µg/l) between pre-pandemic and pandemic periods across different subgroups stratified by age, gender, and season. Statistical comparisons are based on two-sided Welch's $t$-tests, no multiple comparison adjustment. \REV{Median and interquartile range are compared in Supplementary~Table~\ref{tab:results_stat_level_median}.} SD: standard deviation.}
+\label{tab:results_stat_level_mean}
+    \begin{tabular}{|l|c|c|c|}
+    \hline
+    \rowcolor{orange!20} & \textbf{Pre-pandemic} & \textbf{Pandemic} & \textbf{$p$-value}\\ \hline 
+    \textbf{Total}& 26.7 [12.8]& 26.0 [13.4]& $p = 2.34 \times 10^{-47}$\\\hline
+    \multicolumn{4}{|l|}{ \textbf{By age, years (mean, [SD])} } \\\hline
+    18--39 & 25.4 [12.3]& 24.9 [12.8]& $p = 7.41 \times 10^{-9}$\\ \hline
+    40--59 & 26.7 [12.8]& 26.1 [13.4]& $p = 2.61 \times 10^{-16}$	\\ \hline
+    60+ & 27.4 [13.1]& 26.7 [13.9]& $p = 1.35 \times 10^{-15}$\\ \hline
+    \multicolumn{4}{|l|}{ \textbf{By gender (mean, [SD])} } \\ \hline
+    Females& 27.5 [13.0]& 26.7 [13.5]& $p = 3.54 \times 10^{-37}$\\ \hline
+    Males& 25.2 [12.4]& 24.7 [13.2]& $p = 7.48 \times 10^{-11}$\\ \hline
+    \multicolumn{4}{|l|}{\textbf{By season (mean, [SD])} } \\ \hline 
+ Winter (Dec -- Feb)& 24.5 [13.1]& 23.8 [13.6]& $p = 1.31 \times 10^{-12}$
+ \\ \hline 
+ Spring (Mar -- May)& 26.2 [13.5]& 23.9 [13.5]& $p = 4.91 \times 10^{-118}$\\ \hline 
+ Summer (Jun -- Aug)& 28.6 [12.0]& 28.1 [13.1]&$p = 3.76 \times 10^{-6}$\\ \hline 
+ Fall (Sep -- Nov)& 27.7 [11.8]& 28.0 [12.8]&$p = 5.91 \times 10^{-5}$\\ \hline
+\end{tabular}
+\end{table}
+
+
+\vspace{0.4cm}
+\begin{table}[h]
+    \centering
+    \arrayrulecolor{orange}
+\caption{\textbf{Deficiency rates of vitamin D in serum.} Deficiency rates compared before and during the pandemic across different subgroups defined by age, gender, and season. Statistical comparisons are based on two-sided Pearson's $\chi^2$-tests. SD: standard deviation.}
+\label{tab:results_stat_deficiency_rate}
+    \begin{tabular}{|l|c|c|c|}
+    \hline
+    \rowcolor{orange!20} & \textbf{Pre-pandemic} & \textbf{Pandemic} & \textbf{$p$-value}\\ \hline 
+    \textbf{Total}& 48,056 [31.2]& 48,692 [35.2]& $p = 9.00 \times 10^{-114}$\\\hline
+    \multicolumn{4}{|l|}{ \textbf{By age, years (\textit{N}, [\%])} } \\\hline
+    18--39 & 12,179 [34.6]& 14,358 [37.8]& $p = 1.57 \times 10^{-19}$\\ \hline
+    40--59 & 17,504 [30.5]& 17,325 [34.5]& $p = 7.95 \times 10^{-43}$\\ \hline
+    60+ & 18,373 [30.0]& 17,009 [33.9]& $p = 1.53 \times 10^{-45}$\\ \hline
+    \multicolumn{4}{|l|}{ \textbf{By gender (\textit{N}, [\%])} } \\ \hline
+    Female& 28,207 [28.5]& 28,592 [32.6]& $p = 3.03 \times 10^{-80}$\\ \hline
+    Male& 19,849 [36.1]& 20,100 [39.8]& $p = 1.18 \times 10^{-33}$\\ \hline
+ \multicolumn{4}{|l|}{ \textbf{By season (\textit{N}, [\%])} } \\ \hline 
+ Winter (Dec -- Feb)& 14,997 [40.9]& 16,066 [44.2]&$p = 9.92 \times 10^{-20}$\\ \hline 
+ Spring (Mar -- May)& 15,829 [35.7]& 14,144 [44.0]&$p = 1.50 \times 10^{-120}$\\ \hline 
+ Summer (Jun -- Aug)& 7,352 [22.0]& 8,616 [26.6]&$p = 1.28 \times 10^{-43}$\\ \hline 
+ Fall (Sep -- Nov)& 9,878 [25.1]& 9,866 [26.3]&$p = 1.73 \times 10^{-4}$\\ \hline
+\end{tabular}
+\end{table}
+
+
+\newpage
+\clearpage   
+
+
+\section*{Figures}
+
+\begin{figure}[htbp!]
+    \centering
+    \includegraphics[width=.6\textwidth]{overview.pdf}
+    \vspace{-1cm}
+\caption{\textbf{Workflow for data collection and analysis.} This study used routinely-collected laboratory data from a large real-world data platform to compare vitamin D levels before versus during the COVID-19 pandemic. Data were extracted from laboratory information systems (LIS) to provide standardized, high-quality vitamin D measurements. We applied three different analytical approaches -- namely, descriptive analysis, propensity score matching, and machine learning -- to quantify confounder-adjusted changes. Results consistently indicate a significant reduction in mean vitamin D levels during the pandemic, highlighting the value of LIS-derived real-world data for public health monitoring.}
+\label{fig:overview}
+\end{figure}
+
+\newpage
+\begin{figure}
+%\centering
+\hspace{-5.5cm}
+\includegraphics[width=1.5\linewidth]{patient_flowchart.pdf}
+\vspace{-3cm}
+\caption{\textbf{Study population flow.} The flowchart shows the inclusion/exclusion criteria for our sample. All results are based on the sample of $N=$ 292,187 individuals (the only exception is the analysis involving propensity score matching that is based on $N=$ 273,146 individuals).}
+\label{fig:patient_flowchart}
+\end{figure}
+
+
+\clearpage
+
+\newpage
+
+\begin{figure}
+\centering
+\includegraphics[width=0.95\linewidth]{before_during_comparison.pdf}
+\caption{\textbf{Reduction in mean vitamin D levels during the COVID-19 pandemic across age and gender groups.} Mean vitamin D levels before (blue) and during (orange) the COVID-19 pandemic across subpopulations defined by age and gender (see captions above plot; F: females; M: males). Welch's unpaired two-sided $t$-tests indicate significant decreases in all groups (exact $p$-values are reported), highlighting a widespread reduction in vitamin D levels during the pandemic. The absolute change represents the difference between mean vitamin D levels during the pandemic and pre-pandemic periods, while the percentage change reflects this difference as a proportion of pre-pandemic levels. $N=$ 292,187. Centre line in each box = median; box limits = 25th and 75th percentiles; whiskers = data range within 1.5×IQR; outliers plotted as individual points; violin outlines show kernel density of the distribution. Data are presented per group as distributions, not as means ± error bars. No adjustment for multiple comparisons.}
+\label{fig:before_during}
+\end{figure}
+
+\newpage
+\begin{figure}[htbp]
+\centering
+\begin{tabular}{ccc}
+\multicolumn{1}{l}{\textsf{a}} & & \multicolumn{1}{l}{\textsf{b}} \\
+\includegraphics[width=.45\linewidth]{effect_sizes_meanlevels.pdf}&
+\hfill
+&
+\includegraphics[width=.45\linewidth]{effect_sizes_deficiency.pdf}\end{tabular}
+\caption{\textbf{Comparison of estimated changes in vitamin D levels due to the pandemic.} The plots compare the estimated (confounder-adjusted) reductions in the vitamin D levels and deficiency rates due to the COVID-19 pandemic based on three statistical methods, namely, Cohen’s $d$ (for descriptive analysis), standardized mean difference (SMD, for propensity score matching), and the average treatment effect (ATE, for the causal forest). The black dots represent the estimated means, with thick whiskers indicating 99\% confidence intervals (CIs) and thin whiskers representing 95\% CIs. Cohen's $d$ and SMD were standardized by multiplying with the pooled standard deviation to make them comparable with the ATE from the causal forest model. Source data are provided as a Source Data file. \textbf{a},~{Estimated change in mean vitamin D levels. $N=$ 292,187. Points represent mean effect estimates; error bars indicate 95\% and 99\% confidence intervals. \textbf{b},~{Estimated change in vitamin D deficiency rate. $N=$ 292,187. Points represent mean effect estimates; error bars indicate 95\% and 99\% confidence intervals.}}}
+\label{fig:effect_sizes}
+\end{figure}
+
+\newpage
+\begin{figure}[htbp]
+\centering
+\begin{tabular}{ccc}
+\multicolumn{1}{l}{\textsf{a}} & & \multicolumn{1}{l}{\textsf{b}} \\
+\includegraphics[width=.45\linewidth]{subgroup_analysis.pdf}&
+\hfill
+&
+\includegraphics[width=.45\linewidth]{feature_importance.pdf}\end{tabular}
+\caption{\textbf{Characterizing sources of heterogeneity.} Source data are provided as a Source Data file. \textbf{a},~{Subgroup analysis of estimated \REV{absolute} reduction in vitamin D levels. $N=$ 292,187. Points represent mean effect estimates; error bars indicate 95\% and 99\% confidence intervals.} The plot shows the estimated \REV{absolute} change with 99\% (thin lines) and 95\% confidence intervals (thick lines) for each subgroup category in the sensitivity analysis. For example, for the age group 40--59, a negative estimated effect of close to $-1$ indicates that the pandemic group had an average reduction of close to 1 µg/l in vitamin D serum levels compared to the pre-pandemic group. \textbf{b},~{Feature importance in predicting vitamin D levels.} The plot shows the feature importance analysis reporting the explained variance due to different covariates.}
+%and subgroup analysis conducted on the causal forest model used to determine whether the COVID-19 pandemic led to a reduction in vitamin D levels.}
+\label{fig:results_ml}
+\end{figure}
+
+\newpage
+\begin{center}
+\LARGE Supplements
+\end{center}
+\vspace{1cm}
+
+\appendix
+
+\begin{appendices}
+
+\renewcommand\appendixname{Supplement}
+
+\newcommand{\hbAppendixPreoverrule}{S}
+%
+\renewcommand{\thefigure}{\hbAppendixPreoverrule\arabic{figure}}
+\setcounter{figure}{0}
+\renewcommand{\thetable}{\hbAppendixPreoverrule\arabic{table}} 
+\setcounter{table}{0}
+\renewcommand{\theequation}{\hbAppendixPreoverrule\arabic{equation}} 
+\setcounter{equation}{0}
+
+%\renewcommand{\listfigurename}{Supplementary Figures}
+%\renewcommand{\listtablename}{Supplementary Tables}
+%\listoffigures
+%\listoftables
+
+\listofappendixfigures% List of only the entries of the appendix
+\listofappendixtables% List of only the entries of the appendix
+
+\renewcommand{\contentsname}{\normalsize Supplementary Materials}
+\tableofcontents
+
+\clearpage
+
+\begin{figure}
+\centering
+\includegraphics[width=0.95\linewidth]{over_time.pdf}
+\caption[Mean vitamin D levels over time]{\textbf{Mean vitamin D levels over time.} Mean vitamin D levels (µg/l) across the study period from Winter 2018 to Winter 2022. Each point represents the mean vitamin D level for the entire study population for a specific season, while a shaded area denotes the one standard deviation around the mean. Source data are provided as a Source Data file.}
+\label{suppfig:over_time}
+\end{figure}
+\newpage
+
+\begin{figure}
+\centering
+\includegraphics[width=0.95\linewidth]{early_vs_late_pandemic.pdf}
+\caption[Early vs. late pandemic]{\REV{\textbf{Mean vitamin D levels during early vs. late pandemic.} Mean vitamin D levels (µg/l) in the early pandemic phase (March 2020 -- August 2020) compared to the late pandemic phase (September 2021 -- February 2022) using a $t$-test ($^{***}$: $p$-value $< 0.001$).}}
+\label{suppfig:eary_late_pandemic}
+\end{figure}
+
+\newpage
+
+\begin{figure}
+\centering
+\includegraphics[width=0.95\linewidth]{seasons_comparison.pdf}
+\caption[Year-to-year changes in vitamin D levels]{\textbf{Year-to-year changes in vitamin D levels.} \REV{Violin plots display the distribution of vitamin D levels for each season and year before (March 2018 -- February 2020) and during (March 2020 -- February 2022) the pandemic. The black box inside each violin represents the interquartile range (IQR), with the horizontal line marking the median. The thin whiskers extend to 1.5 times the IQR. The black point and error bars indicate the mean and one standard deviation (SD) around the mean. The mean differences between pre-pandemic and pandemic periods are reported separately for each season.}}
+% Outliers were defined as values below 0 and above 70 µg/l and were removed. 
+\label{suppfig:seasons}
+\end{figure}
+
+
+\newpage
+
+
+\begin{table}[h]
+    \centering
+    \arrayrulecolor{orange}
+\caption[Vitamin D levels (median and interquartile range)]{\REV{\textbf{Vitamin D levels (median and interquartile range)} Comparison of median vitamin D levels in serum (in µg/l) between pre-pandemic and pandemic periods across different subgroups stratified by age, gender, and season. Statistical comparisons are based on Wilcoxon rank-sum tests. IQR: interquartile range value.}}
+\label{tab:results_stat_level_median}
+    \begin{tabular}{|l|c|c|c|}
+    \hline
+    \rowcolor{orange!20} & \textbf{Pre-pandemic} & \textbf{Pandemic} & \textbf{$p$-value}\\ \hline 
+    \textbf{Total}& & & \\ \hline
+    \multicolumn{4}{|l|}{\textbf{By age, years (median, [IQR])}} \\\hline
+    18--39 & 24.2 [17.0--31.6] & 23.3 [16.1--31.1] & $p = 5.73 \times 10^{-19}$\\ \hline
+    40--59 & 25.2 [18.2--33.0] & 24.2 [17.0--32.4] & $p = 2.22 \times 10^{-37}$\\ \hline
+    60+ & 26.3 [18.1--34.7] & 25.2 [16.6--34.3] & $p = 3.35 \times 10^{-35}$\\ \hline
+    \multicolumn{4}{|l|}{\textbf{By gender (median, [IQR])}} \\ \hline
+    Females& 26.2 [18.7--34.3] & 25.0 [17.4--33.5] & $p = 1.18 \times 10^{-74}$\\ \hline
+    Males& 23.9 [16.5--31.8] & 23.0 [15.3--31.3] & $p = 8.97 \times 10^{-31}$\\ \hline
+    \multicolumn{4}{|l|}{\textbf{By season (median, [IQR])}} \\ \hline 
+ Winter (Dec -- Feb)& 22.7 [14.9--31.3] & 21.7 [13.9--30.4] & $p = 7.41 \times 10^{-25}$\\ \hline 
+ Spring (Mar -- May)& 24.6 [16.2--33.6] & 21.7 [14.0--30.7] & $p = 3.24 \times 10^{-163}$\\ \hline 
+ Summer (Jun -- Aug)& 27.3 [20.9--34.6] & 26.4 [19.4--34.5] & $p = 1.14 \times 10^{-19}$\\ \hline 
+ Fall (Sep -- Nov)& 26.5 [19.9--33.7] & 26.5 [19.5--34.4] & $p = 1.14 \times 10^{-19}$\\ \hline
+\end{tabular}
+\end{table}
+
+
+
+\newpage
+
+
+\begin{table}
+    \centering
+    \arrayrulecolor{orange}
+\caption[Characteristics of propensity score-matched sample]{\textbf{Characteristics of propensity score-matched sample.} Characteristics for gender and age groups before and during the pandemic as well as mean vitamin D levels and vitamin D deficiency rate across all groups. Sample size before matching: 292,187 unique individuals. Sample size after matching: 267,380 unique individuals. Number of unique individuals lost due to the matching process: 24,807 (8.5\%). Statistical testing was done based on two-sided Pearson's $\chi^2$-tests for categorical data and two-sided Welch's $t$-tests for all numerical data, respectively. Exact $p$-values are provided.}
+\label{supptab:results_psm}
+\footnotesize
+\begin{adjustbox}{max width=\textwidth}
+    \begin{tabular}{|l|c|c|c|}
+    \hline
+    \rowcolor{orange!20} & \textbf{Pre-pandemic} & \textbf{Pandemic} & \textbf{$p$-value}\\ \hline 
+    \rowcolor{orange!20} & (\textit{N}=133,410)& (\textit{N}=133,410)&  \\ \hline
+    \multicolumn{4}{|l|}{ \textbf{Age, years (\textit{N}, [\%])} } \\\hline
+    18--39 & 34,204 [25.6]& 34,204 [25.6]& 1.000\\ \hline
+    40--59 & 49,535 [37.1]& 49,535 [37.1]& 1.000\\ \hline
+    60+ & 49,671 [37.2]& 49,671 [37.2]& 1.000\\ \hline
+    \multicolumn{4}{|l|}{ \textbf{Gender (\textit{N}, [\%])} } \\ \hline
+    Females& 84,880 [63.6]& 84,880 [63.6]& 1.000\\ \hline 
+    Males& 48,530 [36.4]& 48,530 [36.4]& 1.000\\ \hline
+    \multicolumn{4}{|l|}{ \textbf{Season (\textit{N}, [\%])} } \\ \hline 
+ Winter (Dec -- Feb)& 33,878 [25.4]& 33,878 [25.4]&1.000\\ \hline 
+ Spring (Mar -- May)& 32,028 [24.0]& 32,028 [24.0]&1.000\\ \hline 
+ Summer (Jun -- Aug)& 31,222 [23.4]& 31,222 [23.4]&1.000\\ \hline 
+ Fall (Sep -- Nov)& 36,282 [27.2]& 36,282 [27.2]&1.000\\ \hline
+    \multicolumn{4}{|l|}{\textbf{Outcomes}} \\ \hline
+    {Vitamin D levels, µg/l (mean, [SD])} & 26.48 [12.7]& 25.99 [13.4]& $p = 1.11 	\times 10^{-22}$\\ \hline
+    {Vitamin D deficiency rate (n, [\%])} & 42,188 [31.6]& 46,926 [35.2]& $p = 3.02 	\times 10^{-84}$\\ \hline
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+
+\newpage
+
+\begin{table}
+    \centering
+    \arrayrulecolor{orange}
+\caption[Machine learning subgroup analysis stratified by age, gender, and season]{\textbf{Machine learning subgroup analysis stratified by age, gender, and season.} Estimated change in vitamin D levels in µg/l for each covariate sub-category and the corresponding confidence intervals. For example, for the age group 40--59, a negative treatment effect of close to $-1$ indicates that the \REV{pandemic} group had an average reduction of close to 1 µg/l in vitamin D serum levels compared to the \REV{pre-pandemic} group. This suggests that, for individuals aged 40--59, the intervention (in this study: the onset of the pandemic) is associated with a confounder-adjusted decrease in vitamin D levels.}
+\label{supptab:subgroups}
+\footnotesize
+\begin{adjustbox}{max width=\textwidth}
+    \begin{tabular}{|l|r|r|r|r|r|}
+    \hline
+    \rowcolor{orange!20} \textbf{Category} & \textbf{Estimated change} & \textbf{Lower 99\% CI} & \textbf{Upper 99\% CI} & \textbf{Lower 95\% CI} & \textbf{Upper 95\% CI} \\ \hline
+    Age Group: 18--39 & $-$0.6358 & $-$0.8693 & $-$0.4023 & $-$0.8135 & $-$0.4581 \\ \hline
+    Age Group: 40--59 & $-$0.7250 & $-$0.9281 & $-$0.5219 & $-$0.8795 & $-$0.5704 \\ \hline
+    Age Group: 60+    & $-$0.6575 & $-$0.8658 & $-$0.4491 & $-$0.8160 & $-$0.4989 \\ \hline
+    Females           & $-$0.7474 & $-$0.9045 & $-$0.5903 & $-$0.8669 & $-$0.6279 \\ \hline
+    Males             & $-$0.5572 & $-$0.7573 & $-$0.3571 & $-$0.7095 & $-$0.4050 \\ \hline
+    Season: Spring (Mar -- May)    & $-$2.0641 & $-$2.3179 & $-$1.8103 & $-$2.2572 & $-$1.8710 \\ \hline
+    Season: Summer (Jun -- Aug)    & $-$0.4208 & $-$0.6739 & $-$0.1677 & $-$0.6134 & $-$0.2283 \\ \hline
+    Season: Fall (Sep -- Nov)      & 0.3998    & 0.1698    & 0.6298    & 0.2248    & 0.5748    \\ \hline
+    Season: Winter (Dec -- Feb)    & $-$0.6034 & $-$0.8563 & $-$0.3506 & $-$0.7958 & $-$0.4111 \\ \hline
+    \end{tabular}
+    \end{adjustbox}
+
+\vspace{0.5cm}
+\end{table}
+
+
+\newpage
+    
+\section{Sensitivity analysis}
+\label{supp:sensitivity_analysis}
+
+We conducted a causal sensitivity analysis using the \texttt{sensemakr} package \cite{Cinelli2020} to address the possibility of unobserved confounding. Thereby, we can ensure that, even in the presence of unobserved confounding, our coefficient estimates cannot be explained away and thus remain robust. Specifically, we compute the robustness value (RV), which quantifies the minimum strength of association that unobserved confounding would need to have, both with the treatment and with the outcome, to alter our conclusions \cite{Cinelli2020}. The RV indicates how strong a potential unobserved confounder would need to be to (a) bring our coefficient estimates to zero ($RV_{q=1}$) and (b) render the coefficient estimates no longer significant at the $\alpha = 0.01$ level ($RV_{q=1,\alpha=0.01}$). Since the \texttt{sensemakr} package works directly with linear regression models, we approximated the causal forest results with a linear regression framework where the vitamin D serum level is the dependent variable (DV). The results are in Table~\ref{supptab:sensitivity}. 
+
+For the intervention variable (COVID-19 pandemic), the robustness values indicate that (a) an unobserved confounder would need to explain at least 2.42\% of the residual variance in the association with intervention or outcome to fully explain away the observed effect ($RV_{q=1} = 2.42\%$) and (b) would need to explain 2.07\% of the residual variance to make the effect statistically non-significant at the \REV{$\alpha = 0.01$} level ($RV_{q=1,\alpha=0.01} = 2.07\%$). 
+
+The robustness values exceed the explanatory power of an unobserved confounder as strong as the observed covariates (age, gender, and season), as shown in the sensitivity analysis results (Table~\ref{supptab:sensitivity}). For example, we can compare the robustness value against the maximum explained residual variance due to an unobserved confounder as strong as the covariate ``age group''. For the latter, the partial $R^2$ of a confounder with the intervention is $0.28\%$ and the partial $R^2$ of a confounder with the intervention is $0.34\%$. Both values are smaller than the thresholds from the robustness value. Therefore, an unobserved confounder would need to be considerably stronger than the covariate ``age group'' (or any other covariate) to nullify our findings. Based on these results, our conclusions regarding the effect of the COVID-19 pandemic on vitamin D levels are robust to reasonable amounts of potentially unobserved confounding.
+
+\newpage
+
+\begin{table}
+    \centering
+    \arrayrulecolor{orange}
+\caption[Sensitivity analysis results for key covariates]{\textbf{Sensitivity analysis results for key covariates.} The covariates age group, gender, and season were used as benchmarks to compare the strength of association that an unobserved confounder would need to have to explain away the association between both the pandemic intervention and the vitamin D reduction. The benchmarks were selected because they are known and important drivers of heterogeneity in vitamin D levels across the broader population. To make the treatment effect statistically non-significant at the \REV{$\alpha = 0.01$} level, an unobserved confounder would need to explain 2.07\% of the residual variance in the association with intervention or outcome ($RV_{q=1,\alpha=0.01}$). For the treatment effect to be reduced to zero, an unobserved confounder would need to explain at least 2.42\% of the residual variance in the association with intervention or outcome ($RV_{q=1}$). Hence, ideally, explained variance due to an unobserved confounder as strong as the benchmarks should be lower than the robustness values. As desired, this is observed. We thus report the corresponding explained variance of a confounder as strong as the benchmark based on the partial $R^2$ with intervention and partial $R^2$ with outcome. Both values are smaller than the robustness values, implying that a confounder as strong as age, gender, or season would not make the results non-significant (due to $< RV_{q=1,\alpha=0.01}$) or go to zero (due to $< RV_{q=1}$). Hence, a potential unobserved confounder must be substantially more important than any of the benchmarks. We also report the adjusted coefficient (adj. coef.) and the adjusted standard error (adj. s.e.) for a hypothetical setting reflecting the pandemic intervention and an unobserved confounder equally as strong as the association between the observed benchmark (i.e., age, gender, season) and the vitamin D levels. The adjusted estimates for each benchmark confirm that a reasonable confounder (i.e., a confounder as strong as age, gender, or season) would not invalidate the observed negative treatment effect of the pandemic on vitamin D levels. }
+\label{supptab:sensitivity}
+\footnotesize
+    \begin{tabular}{|l|c|c|c|l|}
+    \hline
+    \rowcolor{orange!20} \textbf{Benchmark}& Partial $R^2$ with intervention & Partial $R^2$ with outcome & \textbf{Adj. coef} &\textbf{Adj. s.e.}\\ 
+    \rowcolor{orange!20}  & \textbf{$R^2_{D\sim Z| {\bf X} }$} & \textbf{$R^2_{Y\sim Z| {\bf X}, D}$} & & \\
+    \hline 
+ Age& 0.28\%	& 0.34\%	&$-$0.593&0.0480\\ \hline 
+ Gender& 0.01\%	& 0.65\%&$-$0.614&0.0479\\ \hline 
+ Season& 0.01\%	& 1.48\%&$-$0.603	&0.0477\\\hline
+\end{tabular}
+\end{table}
+
+\newpage
+
+\begin{table}
+    \centering
+    \arrayrulecolor{orange}
+\caption[Balance diagnostics for covariates before and during the pandemic]{\textbf{Balance diagnostics for covariates before and during the pandemic.} We calculated the weighted absolute standardized mean difference (ASMD) for the three key covariates (age group, gender, and test month) between the pre-pandemic and pandemic study populations. ASMD values close to 0 indicate well-balanced groups, implying that propensity scores are well-calibrated. All ASMD values remained below the recommended threshold of 0.1 \cite{Austin2009}, confirming strong covariate balance after weighting. The mean values for each covariate in both study populations are also reported. The pre-pandemic mean and pandemic mean columns represent the average encoded values of age group, gender, and test month in the respective study populations. Age groups were encoded as 1 = 18–-39 years, 2 = 40-–59 years and 3 = 60+ years. Gender was encoded as 1 = female and 2 = male. Test month was encoded chronologically (e.g., 1 = January, 2 = February, etc.).}
+\footnotesize
+\label{supptab:ignorability}
+    \begin{tabular}{|l|c|c|c|l|}
+    \hline
+    \rowcolor{orange!20} \textbf{Covariate} & \textbf{Pre-pandemic mean} & \textbf{Pandemic mean} & \textbf{Weighted ASMD} & \textbf{Threshold} \\ \hline 
+    Age Group & 2.170026 & 2.080980 & 0.0000 & Balanced, <0.1 \\ \hline 
+    Gender & 1.357013 & 1.365407 & $0.517 \times 10^{-19}$ & Balanced, <0.1 \\ \hline 
+    Test Month & 6.242906 & 6.524429 & $-0.405 \times 10^{-16}$ & Balanced, <0.1 \\ \hline
+    \end{tabular}
+\end{table}
+
+\newpage
+\begin{table}[htbp]
+\centering
+\caption[Categorical breakdown of balance diagnostics]{\textbf{\REV{Categorical breakdown of balance diagnostics.}} \REV{Weighted absolute standardized mean differences (ASMD) are reported for each level of the covariates age group, gender, and test month. A value below 0.1 indicates adequate balance. All ASMDs were well below this threshold. The variance ratio (treated / control) of the propensity scores was 0.935, indicating acceptable balance between groups.}}
+\label{tab:balance_diagnostics}
+\footnotesize
+\begin{tabular}{|l|c|}
+\hline
+\rowcolor{orange!20}
+\textbf{Covariate Level} & \textbf{Weighted ASMD} \\
+\hline
+Age 18--39& 0.00005 \\
+Age 40--59& 0.00015 \\
+Age 60+& $-$0.00020 \\
+Male& 0.00005 \\
+January& 0.00042 \\
+February& 0.00008 \\
+March& $-$0.00030 \\
+April& $-$0.00111 \\
+May& $-$0.00009 \\
+June& 0.00020 \\
+\hline
+\end{tabular}
+\end{table}
+
+
+%\input{sensitivity_analysis.tex}
+\newpage
+\section{\REV{Regression analysis}}
+\label{supp:linear_logistic_regression}
+
+\REV{We conducted two additional regression-based analyses. Specifically, we performed both a multivariate logistic regression to link the pandemic to (i)~the changes in continuous serum vitamin D levels (via a linear regression) and (ii)~the odds of vitamin D deficiency (via a logistic regression). The linear regression model (Table~\ref{supptab:linear_regression}) estimates the adjusted mean differences in serum vitamin D concentrations across the same covariates. The results of the logistic regression model (Table~\ref{supptab:logistic_regression}) quantify how the odds of vitamin D deficiency changed during the pandemic and across demographic and seasonal strata. Both models demonstrate statistically significant associations between the pandemic period and vitamin D outcomes, and also confirm established patterns such as seasonal variation and gender differences. These regression results corroborate the findings from our main paper, while providing additional interpretability.}
+
+\REV{All models were implemented in R using the \texttt{glm} and \texttt{lm} functions for logistic and linear regression, respectively \cite{RCoreTeam2023}.}
+
+
+
+\newpage
+\begin{table}[H]
+\centering
+\arrayrulecolor{orange}
+\caption[Regression analysis for the mean differences in vitamin D levels]{\REV{\textbf{Regression analysis for the mean differences in vitamin D levels.} Results from a multivariate linear regression model with serum vitamin D concentration as the outcome. Estimated via ordinary least squares (OLS). The model adjusts for period, age group, gender, and season. Estimates represent the mean difference in vitamin D levels (ng/ml) compared to the reference categories. Individuals were $\geq$18 years; no <18 category. All coefficients are statistically significant ($p < 0.001$).}}
+\label{supptab:linear_regression}
+\footnotesize
+\begin{tabular}{|l|c|c|c|}
+\hline
+\rowcolor{orange!20} \textbf{Variable} & \textbf{Estimate (ng/ml)} & \textbf{99\% CI (Lower)} & \textbf{99\% CI (Upper)} \\ \hline
+Intercept & 23.89 & 23.89 & 24.25 \\ \hline
+Pandemic period (vs Pre-pandemic) & $-$0.67 & $-$0.80 & $-$0.55 \\ \hline
+Pre-pandemic (ref) & --- & --- & --- \\ \hline
+Age 40--59 (vs 18--39) & 1.32 & 1.16 & 1.48 \\ \hline
+Age 60+ (vs 18--39) & 1.98 & 1.82 & 2.14 \\ \hline
+Age 18--39 (ref) & --- & --- & --- \\ \hline
+Male (vs Female) & $-$2.17 & $-$2.30 & $-$2.04 \\ \hline
+Female (ref) & --- & --- & --- \\ \hline
+Spring (Mar -- May) (vs Winter (Dec -- Feb)) & 0.93 & 0.76 & 1.10 \\ \hline
+Summer (Jun -- Aug) (vs Winter (Dec -- Feb)) & 4.16 & 3.98 & 4.34 \\ \hline
+Fall (Sep -- Nov) (vs Winter (Dec -- Feb)) & 3.63 & 3.46 & 3.80 \\ \hline
+Winter (Dec -- Feb) (ref) & --- & --- & --- \\ \hline
+\end{tabular}
+\end{table}
+
+\newpage
+\begin{table}[H]
+\centering
+\arrayrulecolor{orange}
+\caption[Regression analysis for vitamin D deficiency]{\REV{\textbf{Regression analysis for vitamin D deficiency.} Results from a multivariate logistic regression model evaluating the association between pandemic period and vitamin D deficiency as odds ratio. Odds ratios (ORs) > 1 indicate increased odds of deficiency, and ORs < 1 indicate reduced odds, relative to the reference categories. Individuals were $\geq$18 years; no <18 category. All estimates are statistically significant ($p < 0.001$).}}
+\label{supptab:logistic_regression}
+\footnotesize
+\begin{tabular}{|l|c|c|c|}
+\hline
+\rowcolor{orange!20} \textbf{Variable} & \textbf{Odds Ratio} & \textbf{99\% CI (Lower)} & \textbf{99\% CI (Upper)} \\ \hline
+Intercept & 0.681 & 0.662 & 0.701 \\ \hline
+Pandemic period (vs Pre-pandemic) & 1.211 & 1.186 & 1.237 \\ \hline
+Pre-pandemic (ref) & --- & --- & --- \\ \hline
+Age 40--59 (vs 18--39) & 0.833 & 0.811 & 0.856 \\ \hline
+Age 60+ (vs 18--39) & 0.809 & 0.787 & 0.830 \\ \hline
+Age 18--39 (ref) & --- & --- & --- \\ \hline
+Male (vs Female) & 1.416 & 1.387 & 1.447 \\ \hline
+Female (ref) & --- & --- & --- \\ \hline
+Spring (Mar -- May) (vs Winter (Dec -- Feb)) & 0.891 & 0.867 & 0.916 \\ \hline
+Summer (Jun -- Aug) (vs Winter (Dec -- Feb)) & 0.433 & 0.420 & 0.446 \\ \hline
+Fall (Sep -- Nov) (vs Winter (Dec -- Feb)) & 0.468 & 0.455 & 0.482 \\ \hline
+Winter (Dec -- Feb) (ref) & --- & --- & --- \\ \hline
+\end{tabular}
+\end{table}
+
+\newpage
+\section{\REV{Geographic analysis}}
+\label{supp:geographic_analysis}
+
+\subsection{\REV{Descriptive analyses}}
+
+\REV{To explore potential geographic variation in vitamin D status, we stratified the study population by different types of regions, namely, categorized into cities, rural areas, and suburbs based on the Degree of Urbanisation classification by Eurostat \cite{eurostat_degurb_gisco}. Due to data protection, postal code information was not made available to us. The data provider could, however, include the information on the Degree of Urbanization by linking the postal code to the DEGURBA urbanity type. If a clear attribution of a postal code to exactly one urbanity type was not possible due to overlapping boundaries, the postal code was attributed to the urbanity type in which it had the largest geographical area (Geographic attribution and area calculation done with QGIS version 3.34).  Please note that more granular regional analyses (e.g., at the district or address level) were not feasible due to constraints imposed by the ethical oversight board, as they would increase the risk of re-identification.}
+
+\REV{Overall, the majority of individuals resided in urban areas, with over 173{,}000 individuals assigned to cities, followed by nearly 90{,}000 in suburbs, and approximately 41{,}000 in rural areas. Across all regions, mean vitamin D levels declined during the pandemic. In cities, levels decreased from 26.74 µg/L before the pandemic to 25.98 µg/L during the pandemic. In suburbs, the average dropped from 27.41 µg/L to 26.25 µg/L, and in rural areas, from 27.57 µg/L to 26.48 µg/L. These within-region differences comparing before pandemic and pandemic periods were statistically significant in all cases ($p < 0.001$), as shown in Table~\ref{tab:results_stat_level_region}.}
+
+\REV{Vitamin D deficiency rates followed a similar pattern. Prior to the pandemic, deficiency was most common in cities (30.8\%), followed suburbs (28.9\%) and rural areas (28.6\%). During the pandemic, deficiency rates increased across all regions, with the sharpest rise observed in suburbs (to 34.5\%) and cities (to 34.9\%) (Table~\ref{tab:results_stat_deficiency_rate_region}). All observed changes were statistically significant ($p < 0.001$).}
+
+
+
+\newpage
+
+\begin{table}[h]
+\centering
+\arrayrulecolor{orange}
+\caption[Mean vitamin D levels across different types of regions]{\REV{\textbf{Mean vitamin D levels across different types of regions.} Comparison of mean serum vitamin D levels (in µg/l) before and during the pandemic across different types of regions (city, rural, and suburb) based on the Degree of Urbanisation classification by Eurostat \cite{eurostat_degurb_gisco}.  Statistical comparisons are based on two-sided Welch's $t$-tests. Exact $p$-values are provided.}}
+\label{tab:results_stat_level_region}
+\begin{tabular}{|l|c|c|c|}
+\hline
+\rowcolor{orange!20} \textbf{Region} & \textbf{Pre-pandemic} & \textbf{Pandemic} & \textbf{$p$-value} \\
+\hline
+City & 26.40& 25.82& $p = 7.72 \times 10^{-20}$\\
+Rural area & 27.12& 26.30& $p = 1.52 \times 10^{-9}$\\
+Suburb & 26.99& 26.09& $p = 1.26 \times 10^{-23}$\\
+\hline
+\end{tabular}
+\end{table}
+
+\newpage
+
+\begin{table}[h]
+\centering
+\arrayrulecolor{orange}
+\caption[Deficiency rates of vitamin D by different types of regions]{\REV{\textbf{Deficiency rates of vitamin D by different types of regions.} Comparison of deficiency rates before and during the pandemic across different types of regions (city, rural, and suburb) based on the Degree of Urbanisation classification by Eurostat \cite{eurostat_degurb_gisco}. Deficiency is defined as vitamin D serum concentration below 20 µg/l. Statistical comparisons are based on two-sided Pearson's $\chi^2$-tests. Exact $p$-values are provided.}}
+\label{tab:results_stat_deficiency_rate_region}
+\begin{tabular}{|l|c|c|c|}
+\hline
+\rowcolor{orange!20} \textbf{Region} & \textbf{Pre-pandemic} & \textbf{Pandemic} & \textbf{$p$-value} \\
+\hline
+City & 28,144 [32.0\%] & 27,733 [35.5\%] & $p = 5.37 \times 10^{-50}$\\
+Rural area & 6,231 [30.2\%] & 6,477 [34.3\%] & $p = 2.51 \times 10^{-18}$\\
+Suburb & 13,594 [30.2\%] & 14,408 [35.1\%] & $p = 9.05 \times 10^{-53}$\\
+\hline
+\end{tabular}
+\end{table}
+
+\newpage
+\subsection{\REV{Propensity-score matching}}
+
+\REV{We performed propensity score matching where we additionally included the two-digit postal code as regional covariate. For this, a matched study population of 130,641 individuals per period (pre-pandemic and pandemic) was obtained from an initial sample of 292,187 individuals (i.e., total matched sample size of 261,282 observations). This procedure excluded 30,905 individuals (10.6\%) due to a lack of suitable matches. In the matched sample, the mean serum vitamin D level decreased from 26.47~µg/L (SD 12.71) before the pandemic to 25.99~µg/L (SD 13.44) during the pandemic. The vitamin D deficiency rate increased from 31.7\% (41,432 individuals) to 35.2\% (45,948 individuals). The standardized mean difference (SMD) for continuous serum vitamin D levels was $-0.0369$ (99\% CI: $-0.0467$ to $-0.0274$), indicating a small but consistent reduction. For the binary deficiency outcome, the SMD was 0.0733 (99\% CI: 0.0632 to 0.0834), suggesting a meaningful increase in deficiency prevalence following the onset of the pandemic.}
+
+\newpage
+\subsection{\REV{Causal forest}}
+
+\REV{Further, we again employed a causal forest analysis. Across all individuals, the average treatment effect (ATE) of the pandemic was estimated at $-0.678$~µg/L (99\% CI: $-0.802$ to $-0.554$), corresponding to a mean decrease of 2.5\% compared to the pre-pandemic average level of 26.68~µg/L. To assess whether the pandemic effect differed across geographic subgroups, we stratified the causal forest analysis by the regional category variable. The results are visualized in Supplementary Figure~\ref{fig:cf_region_forest}, which indicates a consistent reduction in vitamin D levels across all region types, with slightly more pronounced effects observed in suburb areas.}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.75\linewidth]{cf_region_forest.pdf}
+\caption[Forest plot of pandemic effect by region.]{\REV{\textbf{Estimated pandemic effect on vitamin D levels by region.} Forest plot showing the treatment effect of the pandemic on serum vitamin D levels (µg/L), stratified by region (city, rural area, suburb) using a causal forest model. The plot displays point estimates with 95\% and 99\% confidence intervals. Source data are provided as a Source Data file.}}
+\label{fig:cf_region_forest}
+\end{figure}
+
+
+
+\newpage
+\section{\REV{Analysis with time trend}}
+\label{supp:analysis_with_time_trend}
+
+
+\REV{To assess the presence of a linear time trend in test values, we performed a multivariate linear regression with the test result as the outcome and the number of months since March 2020 as a continuous predictor (negative values indicate pre-pandemic periods). The model includes additional controls for age group, gender, and season (see Supplementary~Table~\ref{tab:results_stat_regression_time_trend}, left). The analysis reveals a statistically significant negative association between time and test values ($\beta = -0.038$, 99\% CI: $[-0.043; -0.034]$, $p < 0.001$), indicating a gradual decline of approximately 0.038 units per month over the study period and thus points to lower vitamin D levels during the pandemic. }
+
+\REV{To complement this analysis, we additionally estimated a logistic regression model using deficiency status (serum value $<$ 20 µg/L) as a binary outcome (see Supplementary~Table~\ref{tab:results_stat_regression_time_trend}, right). This model revealed a statistically significant positive association between time and deficiency odds ($\beta = 0.009$, 99\% CI: $[0.008; 0.010]$, $p < 0.001$), suggesting that the likelihood of deficiency slightly increased over time. All covariates, including age group, gender, and season, were significantly associated with both continuous test values and deficiency risk.}
+
+\begin{table}[h]
+\centering
+\arrayrulecolor{orange}
+\caption[Linear and logistic regression with time trend]{\REV{\textbf{Regression analysis with time trend.} Estimated coefficients from linear and logistic regression analysis modeling the effect of time and covariates on test value and deficiency. The linear model uses the continuous test value as the dependent variable; the logistic model uses deficiency as the binary dependent variable. Coefficients are shown with 99\% confidence intervals (CIs). The $p$-values are derived from $t$-tests (linear model) and Wald $z$-tests (logistic model) for each coefficient.}}
+\label{tab:results_stat_regression_time_trend}
+\scriptsize                    % or \footnotesize
+\setlength{\tabcolsep}{4pt}    % default is 6pt
+\renewcommand{\arraystretch}{1.05}
+
+\begin{adjustbox}{max width=\textwidth} % scales down only if needed
+\begin{tabular}{|l|c|c|c|}
+\hline
+\rowcolor{orange!20} \textbf{Covariate} & \textbf{Linear model (Estimate [99\% CI])} & \textbf{Logistic model (Estimate [99\% CI])} & \textbf{$p$-values (Linear; Logistic)} \\
+\hline
+(Intercept)         & $23.91$ $[23.75; 24.06]$   & $-0.33$ $[-0.35; -0.30]$   & $p < 1 \times 10^{-308};\; p = 3.82 \times 10^{-161}$\\
+Time (months)       & $-0.038$ $[-0.043; -0.034]$ &  $0.009$ $[0.008; 0.010]$  & $p < 3.02 \times 10^{-111};\; p = 9.94 \times 10^{-207}$\\
+Age 40--59          & $1.29$ $[1.11; 1.47]$      & $-0.18$ $[-0.20; -0.16]$   & $p = 1.03 \times 10^{-105};\; p = 1.18 \times 10^{-77}$\\
+Age 60+             & $1.93$ $[1.76; 2.06]$      & $-0.21$ $[-0.23; -0.19]$   & $p = 1.13 \times 10^{-235};\; p = 2.85 \times 10^{-107}$\\
+Male                & $-2.17$ $[-2.31; -2.02]$   & $0.35$ $[0.33; 0.37]$      & $p < 1 \times 10^{-308};\; p < 1 \times 10^{-308}$\\
+Spring (Mar -- May)              & $0.58$ $[0.38; 0.78]$      & $-0.039$ $[-0.07; -0.01]$  & $p = 2.00 \times 10^{-48};\; p = 2.70 \times 10^{-34}$\\
+Summer (Jun -- Aug)              & $3.92$ $[3.70; 4.13]$      & $-0.79$ $[-0.81; -0.75]$   & $p < 1 \times 10^{-308};\; p < 1 \times 10^{-308}$\\
+Fall (Sep -- Nov)                & $3.51$ $[3.30; 3.69]$      & $-0.73$ $[-0.75; -0.71]$   & $p < 1 \times 10^{-308};\; p < 1 \times 10^{-308}$\\
+\hline
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+
+%\REV{To account for temporal dynamics, we proceeded as follows. A natural idea is to include a time trend in addition to a dummy variable indicating the onset of the pandemic. However, this approach is not meaningful in our setting: the pandemic indicator is a deterministic function of calendar time, as all observations with non-negative time values (measured in days before or after the pandemic onset) fall within the pandemic period, and all negative values fall before it. Including both variables in the causal forest model would therefore lead to a rank-deficient design matrix. Another option is to include only the continuous time variable, without a pandemic dummy. Yet, this is equally problematic: it prevents the pre/post comparison of the pandemic and makes interpretation challenging, as the causal forest was originally designed for binary intervention variables. As a remedy, we adopted an ordinary least squares model that includes the pandemic dummy to capture the structural break, along with a continuous time variable to test for any additional linear trend. This approach avoids multicollinearity, maintains interpretability of the pre/post contrast of the pandemic, and allows us to assess whether there are other underlying trends in the outcomes \emph{beyond} the immediate onset of the pandemic.}
+
+% \begin{table}[h]
+% \centering
+% \arrayrulecolor{orange}
+% \caption[Linear and logistic regression with time trend]{\REV{\textbf{Regression analysis with time trend.} Estimated coefficients from linear and logistic regression analysis modeling the effect of time and covariates on test value and deficiency. Time is considered via a dummy variable referring to the onset of the pandemic and a time trend (defined as the number of months since March 2020 as a continuous predictor; negative values indicate pre-pandemic periods). The linear model uses the continuous test value as the dependent variable; the logistic model uses deficiency as the binary dependent variable. Coefficients are shown with 99\% confidence intervals (CIs). The $p$-values are derived from $t$-tests (linear model) and Wald $z$-tests (logistic model) for each coefficient.}}
+% \label{tab:results_stat_regression_time_trend}
+% \begin{tabular}{|l|c|c|c|}
+% \hline
+% \rowcolor{orange!20} \textbf{Covariate} & \textbf{Linear model (Estimate [99\% CI])} & \textbf{Logistic model (Estimate [99\% CI])} & \textbf{$p$-value} \\
+% \hline
+% (Intercept)         & $23.32$ $[23.12; 23.52]$   & $-0.26$ $[-0.30; -0.23]$   & $<$0.001 \\
+% Pandemic            & $1.59$ $[1.30; 1.88]$      & $-0.17$ $[-0.22; -0.12]$   & $<$0.001 \\
+% Time (months)       & $-0.090$ $[-0.100; -0.079]$ &  $0.014$ $[0.013; 0.016]$  & $<$0.001 \\
+% Age 40–59           &  $1.29$ $[1.13; 1.45]$      & $-0.18$ $[-0.20; -0.15]$   & $<$0.001 \\
+% Age 60+             &  $1.92$ $[1.76; 2.08]$      & $-0.20$ $[-0.23; -0.15]$   & $<$0.001 \\
+% Male                & $-2.17$ $[-2.29; -2.04]$    &  $0.35$ $[0.33; 0.37]$     & $<$0.001 \\
+% Spring (Mar -- May)              &  $0.17$ $[-0.02; 0.36]$     & $0.005$ $[-0.03; 0.04]$    & 0.669 \\
+% Summer (Jun -- Aug)              &  $3.60$ $[3.41; 3.79]$      & $-0.75$ $[-0.78; -0.72]$   & $<$0.001 \\
+% Fall (Sep -- Nov)                &  $3.35$ $[3.17; 3.52]$      & $-0.71$ $[-0.74; -0.68]$   & $<$0.001 \\
+% \hline
+% \end{tabular}
+% \end{table}
+
+
+
+\newpage
+
+\section{\REV{Longitudinal analysis}}
+\label{supp:longitudinal_analysis}
+
+\REV{We conducted a longitudinal analysis among individuals who had at least one vitamin D measurement both before and during the pandemic. From the full dataset of repeated measurements, we identified a subset of $N=61{,}393$ individuals with such longitudinal data. Specifically, we fitted a linear mixed-effects model to assess changes in vitamin D levels before and during the pandemic.  The model included fixed effects for period, age group, gender, and season, and random intercepts and slopes for period at the individual level to account for repeated measurements. The results showed a significant increase in vitamin D levels during the pandemic compared to the pre-pandemic period ($\beta = 3.23$, SE $= 0.04$, $t = 74.94$, $p < 0.001$).
+}
+
+\REV{These findings contrast with our cross-sectional analyses, which consistently showed a decline in vitamin D levels during the pandemic. The results may reflect differences in population composition: the subset of individuals with repeated measurements may represent individuals with greater health awareness, better follow-up care, or targeted supplementation, leading to improved vitamin D status over time. In contrast, population-level trends captured in cross-sectional analyses are more likely to reflect broader behavioral or systemic shifts during the pandemic. We include this longitudinal analysis to complement our primary findings and provide additional nuance regarding within-individual changes over time.}
+
+
+
+
+\end{appendices}
+
+\end{document}

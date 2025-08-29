@@ -1,0 +1,3887 @@
+---
+title: "Vitamin D levels before and during the COVID-19 pandemic: Data Analysis"
+output: html_document
+date: "2025-02-01"
+author: "Lea Skapetze"
+---
+
+
+```{r setup, include=FALSE}
+# Set chunk options
+knitr::opts_chunk$set(echo = TRUE)
+
+# Load required libraries
+library(lubridate)
+library(ggplot2)
+library(rlang)
+library(tidyr)
+library(stringr)
+library(stats)
+library(purrr)
+library(ggsignif)
+library(MatchIt)
+library(lmtest)
+library(sandwich)
+library(parallel)
+library(broom)
+library(cobalt)
+library(optmatch)
+library(lm.beta)
+library(grf)
+library(tidyverse)
+library(mediation)
+library(dplyr)
+library(sensemakr)
+library(ggrepel)
+library(cobalt)
+library(readr)
+library(xtable)
+library(nlme)
+
+# Turn off scientific notations
+options(scipen = 999)
+
+# Check versions of packages
+R.version.string
+packageVersion("grf")
+packageVersion("MatchIt")
+packageVersion("sensemakr")
+
+# Pretty printer: "p = 5.6 × 10⁻¹⁸" with superscripts
+format_p_sci <- function(p, digits = 2) {
+  if (is.na(p)) return("p = NA")
+  if (p == 0)   return("p < 1 × 10⁻³⁰⁸")  # defensive underflow guard
+
+  s <- formatC(p, format = "e", digits = digits)  # e.g., "5.60e-18"
+  parts <- strsplit(s, "e", fixed = TRUE)[[1]]
+  base <- parts[1]
+  exp  <- parts[2]
+
+  supers <- c(
+    "0"="⁰","1"="¹","2"="²","3"="³","4"="⁴",
+    "5"="⁵","6"="⁶","7"="⁷","8"="⁸","9"="⁹",
+    "-"="⁻","+"="⁺"
+  )
+  exp_sup <- paste0(supers[strsplit(exp, "")[[1]]], collapse = "")  # <-- collapse!
+
+  paste0("p = ", base, " × 10", exp_sup)
+}
+
+
+```
+
+## 1. Prepare the data
+```{r}
+df_unclean <- read.csv("/data/analytics/data_package_archive/HI-01_Covid_VitD/v2/for_costumer/20250604_HI-01_Covid_Study_Data_Package.csv")
+
+unique_patients_count <- df_unclean %>%
+  distinct(patient) %>%
+  nrow()
+
+cat("Unique patients before cleaning steps:", unique_patients_count, "\n")
+```
+
+
+### 1.1 All measurements
+```{r}
+
+df_all_measurements <- read.csv("data.csv")
+
+# Count and calculate percentage of unique patients with gender "U"
+gender_u_summary <- df_all_measurements %>%
+  dplyr::select(patient, gender) %>%
+  distinct() %>%
+  summarise(
+    count_gender_u = sum(gender == "U"),
+    percentage_gender_u = (sum(gender == "U") / n()) * 100
+  )
+
+# Print the summary
+print(gender_u_summary)
+
+ # GENDER
+df_all_measurements <- df_all_measurements %>%
+  filter(gender != "U")
+
+# AGE GROUPS
+
+df_all_measurements <- df_all_measurements %>%
+  mutate(age_group = case_when(
+    age %in% c("[18, 30[", "[30, 40[") ~ "[18, 39]",
+    age %in% c("[40, 50[", "[50, 60[") ~ "[40, 59]",
+    age == ">=60" ~ "60+",
+    TRUE ~ "Unknown" # In case there are entries that don't fit the above categories
+  ))
+
+# DATES, PERIODS, SEASONS
+
+# Convert 'cohort_year' and 'test_month' to date format
+df_all_measurements$test_date <- with(df_all_measurements, paste(cohort_year, test_month, "01", sep="-"))
+df_all_measurements$test_date <- as.Date(df_all_measurements$test_date, format="%Y-%m-%d")
+
+# Create a new column `year_month` combining `cohort_year` and `test_month`
+df_all_measurements <- df_all_measurements %>%
+  mutate(
+    year_month = as.Date(paste(cohort_year, test_month, "01", sep = "-"), format = "%Y-%m-%d")
+  )
+
+# Define periods “B” for before the pandemic and “D” for during the pandemic
+period1 <- c(as.Date("2018-03-01"), as.Date("2020-02-29"))
+period2 <- c(as.Date("2020-03-01"), as.Date("2022-02-28"))
+
+# Assign each entry to a period
+assign_period <- function(date) {
+  if (date >= period1[1] && date <= period1[2]) {
+    return("B")
+  } else if (date >= period2[1] && date <= period2[2]) {
+    return("D")
+  } else {
+    return(NA) 
+  }
+}
+
+# Create a new column for the period
+df_all_measurements$period <- as.character(sapply(df_all_measurements$test_date, assign_period))
+
+# Filter out entries that do not belong to either period
+df_all_measurements <- df_all_measurements[!is.na(df_all_measurements$period),]
+
+# Define a function to convert test month to season and adjust cohort_year
+# The get_season() function adjusts the cohort_year for December by incrementing the year (year + 1), ensuring that December 2019 belongs to Winter 2020
+get_season <- function(month, year) {
+  if (month %in% c(12)) {
+    return(list(season = "Winter", cohort_year = year + 1)) # December moves to the next year's Winter
+  } else if (month %in% c(1, 2)) {
+    return(list(season = "Winter", cohort_year = year)) # January and February are Winter of the current year 
+  } else if (month %in% c(3, 4, 5)) {
+    return(list(season = "Spring", cohort_year = year))
+  } else if (month %in% c(6, 7, 8)) {
+    return(list(season = "Summer", cohort_year = year))
+  } else if (month %in% c(9, 10, 11)) {
+    return(list(season = "Fall", cohort_year = year))
+  } else {
+    return(list(season = NA, cohort_year = year)) # Handle unexpected values
+  }
+}
+# For December measurements: In the end the column cohort_year is the reassigned year, and the column year is the original year
+
+# Apply the function to adjust both season and cohort_year
+adjusted_season <- mapply(get_season, df_all_measurements$test_month, df_all_measurements$cohort_year, SIMPLIFY = FALSE)
+df_all_measurements$season <- factor(sapply(adjusted_season, function(x) x$season), levels = c("Winter", "Spring", "Summer", "Fall"))
+df_all_measurements$cohort_year <- sapply(adjusted_season, function(x) x$cohort_year)
+
+# Create ordered season-year by sorting year and season
+df_all_measurements <- df_all_measurements %>%
+  mutate(
+    season_year = paste(cohort_year, season)
+  ) %>%
+  arrange(cohort_year, season) %>%
+  mutate(
+    season_year = factor(season_year, levels = unique(season_year), ordered = TRUE)
+  )
+
+# VIT D DEFICIENCY STATUS
+
+# Convert the column for value to numeric instead of character 
+df_all_measurements <- df_all_measurements %>%
+  mutate(value_result = as.numeric(gsub(",", ".", value_result)))
+
+# Filter df_all_measurements for only valid entries in value_result column
+df_all_measurements <- df_all_measurements %>% 
+  filter(!is.na(value_result))
+
+# Determining deficiency status 
+thresholds <- list(
+  VD3 = 20  # to be changed for a different param
+)
+
+# Function to check deficiency for Vitamin D
+get_deficiency_status <- function(value) {
+  threshold <- thresholds$VD3 # to be changed for a different param
+  if (!is.na(value) && value < threshold) {
+    return(1)  # Deficient
+  } else {
+    return(0)  # Not deficient
+  }
+}
+
+
+# Calculation of deficiency status based on numeric value_result column
+df_all_measurements <- df_all_measurements %>%
+  rowwise() %>%
+  mutate(deficient = get_deficiency_status(value_result)) %>%
+  ungroup()
+
+# Make sure there are not NAs
+df_all_measurements <- df_all_measurements %>% filter(!is.na(value_result), !is.na(period), !is.na(gender), !is.na(age_group))
+
+# Factorize relevant columns for Propensity-Score Matching and Machine Learning
+df_all_measurements$gender <- factor(df_all_measurements$gender)
+df_all_measurements$age_group <- factor(df_all_measurements$age_group)
+df_all_measurements$period <- factor(df_all_measurements$period)
+df_all_measurements$test_month <- factor(df_all_measurements$test_month)
+df_all_measurements$season <- factor(df_all_measurements$season)
+
+
+head(df_all_measurements)
+
+# STATISTICS
+
+# Define Z Scores
+z_99 <- 2.576
+z_95 <- 1.960 
+
+```
+
+### 1.2 First measurement only
+```{r}
+df <- read.csv("/data/analytics/data_package_archive/HI-01_Covid_VitD/v2/for_costumer/20250604_HI-01_Covid_Study_Data_Package.csv")
+
+# Limit cleaned data frame to only first measurement per patient
+df <- df %>%
+  arrange(patient, cohort_year, test_month) %>%  
+  group_by(patient) %>%                          
+  slice_head(n = 1) %>%                         
+  ungroup()
+
+# GENDER
+df <- df %>%
+  filter(gender != "U")
+
+# AGE GROUPS
+
+df <- df %>%
+  mutate(age_group = case_when(
+    age %in% c("[18, 30[", "[30, 40[") ~ "[18, 39]",
+    age %in% c("[40, 50[", "[50, 60[") ~ "[40, 59]",
+    age == ">=60" ~ "60+",
+    TRUE ~ "Unknown" # In case there are entries that don't fit the above categories
+  ))
+
+# DATES, PERIODS, SEASONS
+
+# Convert 'cohort_year' and 'test_month' to date format
+df$test_date <- with(df, paste(cohort_year, test_month, "01", sep="-"))
+df$test_date <- as.Date(df$test_date, format="%Y-%m-%d")
+
+# Create a new column `year_month` combining `cohort_year` and `test_month`
+df <- df %>%
+  mutate(
+    year_month = as.Date(paste(cohort_year, test_month, "01", sep = "-"), format = "%Y-%m-%d")
+  )
+
+# Define periods “B” for before the pandemic and “D” for during the pandemic
+period1 <- c(as.Date("2018-03-01"), as.Date("2020-02-29"))
+period2 <- c(as.Date("2020-03-01"), as.Date("2022-02-28"))
+
+# Assign each entry to a period
+assign_period <- function(date) {
+  if (date >= period1[1] && date <= period1[2]) {
+    return("B")
+  } else if (date >= period2[1] && date <= period2[2]) {
+    return("D")
+  } else {
+    return(NA) 
+  }
+}
+
+# Create a new column for the period
+df$period <- as.character(sapply(df$test_date, assign_period))
+
+# Filter out entries that do not belong to either period
+df <- df[!is.na(df$period),]
+
+# Define a function to convert test month to season and adjust cohort_year
+# The get_season() function adjusts the cohort_year for December by incrementing the year (year + 1), ensuring that December 2019 belongs to Winter 2020
+get_season <- function(month, year) {
+  if (month %in% c(12)) {
+    return(list(season = "Winter", cohort_year = year + 1)) # December moves to the next year's Winter
+  } else if (month %in% c(1, 2)) {
+    return(list(season = "Winter", cohort_year = year)) # January and February are Winter of the current year 
+  } else if (month %in% c(3, 4, 5)) {
+    return(list(season = "Spring", cohort_year = year))
+  } else if (month %in% c(6, 7, 8)) {
+    return(list(season = "Summer", cohort_year = year))
+  } else if (month %in% c(9, 10, 11)) {
+    return(list(season = "Fall", cohort_year = year))
+  } else {
+    return(list(season = NA, cohort_year = year)) # Handle unexpected values
+  }
+}
+# For December measurements: In the end the column cohort_year is the reassigned year, and the column year is the original year
+
+# Apply the function to adjust both season and cohort_year
+adjusted_season <- mapply(get_season, df$test_month, df$cohort_year, SIMPLIFY = FALSE)
+df$season <- factor(sapply(adjusted_season, function(x) x$season), levels = c("Winter", "Spring", "Summer", "Fall"))
+df$cohort_year <- sapply(adjusted_season, function(x) x$cohort_year)
+
+# Create ordered season-year by sorting year and season
+df <- df %>%
+  mutate(
+    season_year = paste(cohort_year, season)
+  ) %>%
+  arrange(cohort_year, season) %>%
+  mutate(
+    season_year = factor(season_year, levels = unique(season_year), ordered = TRUE)
+  )
+
+# VIT D DEFICIENCY STATUS
+
+# Convert the column for value to numeric instead of character 
+df <- df %>%
+  mutate(value_result = as.numeric(gsub(",", ".", value_result)))
+
+# Filter df for only valid entries in value_result column
+df <- df %>% 
+  filter(!is.na(value_result))
+
+# Determining deficiency status 
+thresholds <- list(
+  VD3 = 20  # to be changed for a different param
+)
+
+# Function to check deficiency for Vitamin D
+get_deficiency_status <- function(value) {
+  threshold <- thresholds$VD3 # to be changed for a different param
+  if (!is.na(value) && value < threshold) {
+    return(1)  # Deficient
+  } else {
+    return(0)  # Not deficient
+  }
+}
+
+
+# Calculation of deficiency status based on numeric value_result column
+df <- df %>%
+  rowwise() %>%
+  mutate(deficient = get_deficiency_status(value_result)) %>%
+  ungroup()
+
+# Make sure there are not NAs
+df <- df %>% filter(!is.na(value_result), !is.na(period), !is.na(gender), !is.na(age_group))
+
+# Factorize relevant columns for Propensity-Score Matching and Machine Learning
+df$gender <- factor(df$gender)
+df$age_group <- factor(df$age_group)
+df$period <- factor(df$period)
+df$test_month <- factor(df$test_month)
+df$season <- factor(df$season)
+
+
+head(df)
+
+# STATISTICS
+
+# Define Z Scores
+z_99 <- 2.576
+z_95 <- 1.960 
+```
+
+
+## 2. Descriptive Statistics
+
+```{r}
+# Calculate percentage of vitamin D levels > 70 µg/l
+outlier_count <- df %>% filter(value_result > 70) %>% nrow()
+total_count <- nrow(df)
+outlier_percentage <- (outlier_count / total_count) * 100
+
+cat("Number of values > 70 µg/l:", outlier_count, "\n")
+cat("Percentage of values > 70 µg/l:", round(outlier_percentage, 2), "%\n")
+```
+
+
+### 2.1 Basic comparison
+#### 2.1.1 Sample sizes, counts, mean levels and deficiency rates (unstratified)
+```{r}
+# Count sample size in period "B" and period "D"
+sample_size_period <- df %>% 
+  count(period)
+
+sample_size_contingency <- with(df, table(period))
+sample_size_p_value <- chisq.test(sample_size_contingency)$p.value
+
+# Count how many entries for each age group in period "B" and "D" (absolute nr and percentage)
+age_group_counts <- df %>%
+  group_by(period, age_group) %>%
+  summarise(n = n(), .groups = 'drop') %>%
+  group_by(period) %>%
+  mutate(percentage = n / sum(n) * 100) %>%
+  ungroup()
+
+age_group_contingency <- with(df, table(period, age_group))
+age_group_p_value <- chisq.test(age_group_contingency)$p.value
+
+# Count how many entries for each gender group in period "B" and "D" (absolute nr and percentage)
+gender_group_counts <- df %>%
+  group_by(period, gender) %>%
+  summarise(n = n(), .groups = 'drop') %>%
+  group_by(period) %>%
+  mutate(percentage = n / sum(n) * 100) %>%
+  ungroup()
+
+
+gender_group_contingency <- with(df, table(period, gender))
+gender_group_p_value <- chisq.test(gender_group_contingency)$p.value
+
+# Count how many entries for each season group in period "B" and "D" (absolute nr and percentage)
+season_counts <- df %>%
+  group_by(period, season) %>%
+  summarise(n = n(), .groups = 'drop') %>%
+  group_by(period) %>%
+  mutate(percentage = n / sum(n) * 100) %>%
+  ungroup()
+
+season_contingency <- with(df, table(period, season))
+season_counts_p_value <- chisq.test(season_contingency)$p.value
+
+# The mean vitamin D level in period B and D (with standard deviation)
+mean_vitamin_d_levels <- df %>%
+  group_by(period) %>%
+  summarise(
+    mean_value = mean(value_result, na.rm = TRUE),
+    sd_value = sd(value_result, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+# Vitamin D deficiency rate for period B and D (in percent)
+vitamin_d_deficiency_rate <- df %>%
+  group_by(period) %>%
+  summarise(
+    deficiency_count = sum(deficient),             
+    total_count = n(), 
+    deficiency_rate = sum(deficient) / n() * 100, 
+    .groups = 'drop')
+
+# Printing results
+print(sample_size_period)
+print(sample_size_p_value)
+print(age_group_counts)
+print(age_group_p_value)
+print(gender_group_counts)
+print(gender_group_p_value)
+print(season_counts)
+print(season_counts_p_value)
+print(mean_vitamin_d_levels)
+print(vitamin_d_deficiency_rate)
+
+# P Values
+## ---- all_pvalues_for_table 1 -----------------------------------------------
+
+# Pretty printer: "p = 5.6 × 10⁻¹⁸" with superscripts
+format_p_sci <- function(p, digits = 2) {
+  if (length(p) == 0 || is.na(p)) return("p = NA")
+  if (p == 0) return("p < 1 × 10⁻³⁰⁸")
+  s <- formatC(p, format = "e", digits = digits)  # e.g., "5.60e-18"
+  parts <- strsplit(s, "e", fixed = TRUE)[[1]]
+  base <- parts[1]; exp <- parts[2]
+  supers <- c("0"="⁰","1"="¹","2"="²","3"="³","4"="⁴",
+              "5"="⁵","6"="⁶","7"="⁷","8"="⁸","9"="⁹",
+              "-"="⁻","+"="⁺")
+  exp_sup <- paste0(supers[strsplit(exp, "")[[1]]], collapse = "")
+  paste0("p = ", base, " × 10", exp_sup)
+}
+
+# Helper: per-level χ² vs period (B/D) for a categorical variable
+subgroup_chisq_by_period <- function(data, var_name, period_var = "period") {
+  stopifnot(period_var %in% names(data), var_name %in% names(data))
+  d <- dplyr::filter(data, !is.na(.data[[var_name]]), !is.na(.data[[period_var]]))
+  d <- d %>% dplyr::filter(.data[[period_var]] %in% c("B","D"))
+  levs <- if (is.factor(d[[var_name]])) levels(d[[var_name]]) else sort(unique(d[[var_name]]))
+  total_B <- sum(d[[period_var]] == "B"); total_D <- sum(d[[period_var]] == "D")
+
+  purrr::map_dfr(levs, function(lvl) {
+    tab <- table(d[[period_var]], d[[var_name]] == lvl)
+    # ensure rows B/D exist
+    if (!all(c("B","D") %in% rownames(tab))) {
+      miss <- setdiff(c("B","D"), rownames(tab))
+      addm <- matrix(0, nrow = length(miss), ncol = ncol(tab),
+                     dimnames = list(miss, colnames(tab)))
+      tab <- rbind(tab, addm)[c("B","D"), , drop = FALSE]
+    }
+    p <- suppressWarnings(chisq.test(tab, correct = FALSE)$p.value)
+    n_B <- tab["B","TRUE"]; n_D <- tab["D","TRUE"]
+    tibble::tibble(
+      variable = var_name,
+      level = as.character(lvl),
+      n_B = as.integer(n_B),
+      pct_B = 100 * n_B / total_B,
+      n_D = as.integer(n_D),
+      pct_D = 100 * n_D / total_D,
+      p_value = p,
+      p_formatted = format_p_sci(p)
+    )
+  }) %>% dplyr::arrange(variable, level)
+}
+
+# ---------- GLOBAL p-values ----------
+# Global χ² for categorical vars
+p_age_global    <- suppressWarnings(chisq.test(table(df$period, df$age_group))$p.value)
+p_gender_global <- suppressWarnings(chisq.test(table(df$period, df$gender))$p.value)
+p_season_global <- suppressWarnings(chisq.test(table(df$period, df$season))$p.value)
+
+# Welch's t-test for mean vitamin D level (B vs D)
+p_mean_global <- t.test(value_result ~ period, data = df, var.equal = FALSE)$p.value
+
+# χ² for deficiency rate (deficient vs not, B vs D)
+p_def_global  <- suppressWarnings(chisq.test(table(df$period, df$deficient))$p.value)
+
+# ---------- PER-SUBGROUP p-values ----------
+p_age_levels    <- subgroup_chisq_by_period(df, "age_group")
+p_gender_levels <- subgroup_chisq_by_period(df, "gender")
+p_season_levels <- subgroup_chisq_by_period(df, "season")
+
+# ---------- Collect everything table-ready ----------
+pvals_global_tbl <- tibble::tibble(
+  row_label = c(
+    "Age group (global)",
+    "Gender (global)",
+    "Season (global)",
+    "Vitamin D levels (Welch t-test)",
+    "Vitamin D deficiency rate"
+  ),
+  p_value = c(p_age_global, p_gender_global, p_season_global, p_mean_global, p_def_global),
+  p_formatted = purrr::map_chr(p_value, format_p_sci)
+)
+
+# For per-row entries, we keep the actual level strings from your data
+pvals_subgroups_tbl <- dplyr::bind_rows(
+  p_age_levels    %>% dplyr::mutate(row_label = paste0("Age: ", level)) %>% dplyr::select(row_label, p_value, p_formatted),
+  p_gender_levels %>% dplyr::mutate(row_label = paste0("Gender: ", level)) %>% dplyr::select(row_label, p_value, p_formatted),
+  p_season_levels %>% dplyr::mutate(row_label = paste0("Season: ", level)) %>% dplyr::select(row_label, p_value, p_formatted)
+)
+
+# Final combined table of p-values (global + per-subgroup)
+pvalues_for_latex <- dplyr::bind_rows(
+  pvals_global_tbl,
+  pvals_subgroups_tbl
+)
+
+# Inspect
+pvals_global_tbl
+pvals_subgroups_tbl
+pvalues_for_latex
+
+p_age_global_fmt    <- format_p_sci(p_age_global)
+p_gender_global_fmt <- format_p_sci(p_gender_global)
+p_season_global_fmt <- format_p_sci(p_season_global)
+p_mean_global_fmt   <- format_p_sci(p_mean_global)
+p_def_global_fmt    <- format_p_sci(p_def_global)
+
+cat(
+  "\nGLOBAL p-values:\n",
+  "Age group: ", p_age_global_fmt, "\n",
+  "Gender: ", p_gender_global_fmt, "\n",
+  "Season: ", p_season_global_fmt, "\n",
+  "Mean vitamin D: ", p_mean_global_fmt, "\n",
+  "Deficiency rate: ", p_def_global_fmt, "\n",
+  sep = ""
+)
+
+
+```
+
+#### 2.1.2 Effect size (Cohen's d) - Mean vitamin D levels
+```{r}
+# Means and standard deviations
+mean_b <- mean(df$value_result[df$period == "B"])
+mean_d <- mean(df$value_result[df$period == "D"])
+sd_b <- sd(df$value_result[df$period == "B"])
+sd_d <- sd(df$value_result[df$period == "D"])
+
+# Pooled SD
+n1 <- sum(df$period == "B")
+n2 <- sum(df$period == "D")
+sd_pooled <- sqrt(((n1 - 1) * sd_b^2 + (n2 - 1) * sd_d^2) / (n1 + n2 - 2))
+
+# Cohen's d (flipped sign for "During - Before")
+cohens_d <- (mean_d - mean_b) / sd_pooled  # Flips the direction
+print(paste("Cohen's d:", round(cohens_d, 4)))
+
+# Convert sample sizes to numeric to avoid integer overflow
+n1 <- as.numeric(n1)  # Before pandemic
+n2 <- as.numeric(n2)  # During pandemic
+
+# Standard error of Cohen's d
+se_d <- sqrt((n1 + n2) / (n1 * n2) + (cohens_d^2) / (2 * (n1 + n2)))
+
+# Calculate CIs
+ci_99_lower_d <- cohens_d - z_99 * se_d
+ci_99_upper_d <- cohens_d + z_99 * se_d
+
+ci_95_lower_d <- cohens_d - z_95 * se_d  
+ci_95_upper_d <- cohens_d + z_95 * se_d  
+
+# Print results
+cat("99% CI for Cohen's d:", ci_99_lower_d, "to", ci_99_upper_d, "\n")
+cat("95% CI for Cohen's d:", ci_95_lower_d, "to", ci_95_upper_d, "\n") 
+
+# Note: Confidence intervals for Cohen's d can be calculated using bootstrapping for more precise estimates, but this script uses an analytical approximation based on the standard error of d and Z-scores (valid for sufficiently large sample sizes and normal effect size distribution).
+
+```
+
+#### 2.1.3 Effect size (Cohen's d) - Vitamin D deficiency rates
+
+```{r}
+# Ensure sample sizes are numeric to avoid integer overflow
+n1_def <- as.numeric(sum(df$period == "B"))
+n2_def <- as.numeric(sum(df$period == "D"))
+
+# Compute means and standard deviations for deficiency rates
+mean_b_def <- mean(df$deficient[df$period == "B"])
+mean_d_def <- mean(df$deficient[df$period == "D"])
+sd_b_def <- sd(df$deficient[df$period == "B"])
+sd_d_def <- sd(df$deficient[df$period == "D"])
+
+# Pooled SD for deficiency
+sd_pooled_def <- sqrt(((n1_def - 1) * sd_b_def^2 + (n2_def - 1) * sd_d_def^2) / (n1_def + n2_def - 2))
+
+# Cohen's d (flipped sign for "During - Before")
+cohens_d_def <- (mean_d_def - mean_b_def) / sd_pooled_def
+print(paste("Cohen's d for deficiency:", round(cohens_d_def, 4)))
+
+# Standard error for Cohen's d (now using numeric sample sizes)
+se_d_def <- sqrt((n1_def + n2_def) / (n1_def * n2_def) + (cohens_d_def^2) / (2 * (n1_def + n2_def)))
+
+# Confidence intervals for Cohen's d
+ci_99_lower_d_def <- cohens_d_def - z_99 * se_d_def
+ci_99_upper_d_def <- cohens_d_def + z_99 * se_d_def
+ci_95_lower_d_def <- cohens_d_def - z_95 * se_d_def
+ci_95_upper_d_def <- cohens_d_def + z_95 * se_d_def
+
+# Print results
+cat("99% CI for Cohen's d:", ci_99_lower_d_def, "to", ci_99_upper_d_def, "\n")
+cat("95% CI for Cohen's d:", ci_95_lower_d_def, "to", ci_95_upper_d_def, "\n")
+
+```
+
+
+### 2.2 Mean levels stratified by age, gender and season
+```{r}
+# Compare mean vitamin D levels between periods using t-test
+vitamin_d3_levels_B <- df %>% filter(period == "B") %>% pull(value_result)
+vitamin_d3_levels_D <- df %>% filter(period == "D") %>% pull(value_result)
+
+t_test_results <- t.test(vitamin_d3_levels_B, vitamin_d3_levels_D, na.rm = TRUE)
+mean_comparison_p_value <- t_test_results$p.value
+
+print(mean_comparison_p_value)
+
+
+# Construct a contingency table for deficiencies in periods B and D
+deficiency_table <- df %>% 
+  group_by(period) %>% 
+  summarise(deficient = sum(deficient), not_deficient = n() - sum(deficient)) %>%
+  dplyr::select(-period) %>% 
+  as.matrix()
+
+chi_square_test_result <- chisq.test(deficiency_table)
+  deficiency_comparison_p_value <- chi_square_test_result$p.value
+  
+
+print(deficiency_comparison_p_value)
+
+# Mean Vitamin D levels by age group
+vitamin_d3_age_means <- df %>%
+  group_by(period, age_group) %>%
+  summarise(
+    mean_value = mean(value_result, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+age_group_stats <- df %>%
+  group_by(period, age_group) %>%
+  summarise(
+    mean_value = mean(value_result, na.rm = TRUE),
+    sd_value = sd(value_result, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+
+# Mean Vitamin D Levels by gender group
+vitamin_d3_gender_means <- df %>%
+  group_by(period, gender) %>%
+  summarise(
+    mean_value = mean(value_result, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+gender_group_stats <- df %>%
+  filter(gender %in% c("M", "F")) %>%
+  group_by(period, gender) %>%
+  summarise(
+    mean_value = mean(value_result, na.rm = TRUE),
+    sd_value = sd(value_result, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+# Mean Vitamin D Levels by season 
+vitamin_d3_season_means <- df %>%
+  group_by(period, season) %>%
+  summarise(
+    mean_value = mean(value_result, na.rm = TRUE),
+    sd_value = sd(value_result, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+season_group_stats <- df %>%
+  group_by(period, season) %>%
+  summarise(
+    mean_value = mean(value_result, na.rm = TRUE),
+    sd_value = sd(value_result, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+print(age_group_stats)
+print(gender_group_stats)
+print(season_group_stats)
+
+```
+
+### 2.4 Statistical testing for age, gender and season
+```{r}
+# Statistical Testing within each sub-group
+
+# Function to perform a t-test and return p-value
+perform_t_test <- function(data_group_1, data_group_2) {
+  test_result <- t.test(data_group_1, data_group_2, na.rm = TRUE)
+  return(test_result$p.value)
+}
+
+# Calculate p-values for age groups
+p_values_age_groups <- df %>%
+  group_by(age_group) %>%
+  summarise(
+    t_test_p_value = perform_t_test(
+      value_result[period == "B"],
+      value_result[period == "D"]
+    ),
+    .groups = 'drop'  
+  )
+
+# Calculate p-values for gender groups
+p_values_gender_groups <- df %>%
+  filter(gender %in% c("M", "F")) %>%
+  group_by(gender) %>%
+  summarise(
+    t_test_p_value = perform_t_test(
+      value_result[period == "B"],
+      value_result[period == "D"]
+    ),
+    .groups = 'drop'  
+  )
+
+# Calculate p-values for gender groups
+p_values_season_groups <- df %>%
+  group_by(season) %>%
+  summarise(
+    t_test_p_value = t.test(
+      value_result[period == "B"],
+      value_result[period == "D"],
+    )$p.value,
+    .groups = 'drop'
+  )
+
+# Print p-values
+print(p_values_age_groups)
+print(p_values_gender_groups)
+print(p_values_season_groups)
+
+# Exact p values
+
+# LaTeX-ready scientific formatter: "p = 2.34 \\times 10^{-47}"
+format_p_latex <- function(p, digits = 2) {
+  if (length(p) == 0 || is.na(p)) return("$p = \\text{NA}$")
+  if (p == 0) return("$p < 1 \times 10^{-308}$")
+  s <- formatC(p, format = "e", digits = digits)   # e.g. "4.91e-118"
+  parts <- strsplit(s, "e", fixed = TRUE)[[1]]
+  base <- parts[1]; exp <- as.integer(parts[2])
+  paste0("$p = ", base, " \times 10^{", exp, "}$")
+}
+
+
+# Helper: Welch t-test p-value (B vs D) for each level of a categorical var
+welch_p_by_group <- function(data, group_var, value_var = "value_result",
+                             period_var = "period") {
+  stopifnot(all(c(group_var, value_var, period_var) %in% names(data)))
+  d <- dplyr::filter(data, .data[[period_var]] %in% c("B","D"),
+                     !is.na(.data[[group_var]]), !is.na(.data[[value_var]]))
+
+  levs <- if (is.factor(d[[group_var]])) levels(d[[group_var]]) else sort(unique(d[[group_var]]))
+
+  purrr::map_dfr(levs, function(lvl) {
+    sub <- d %>% dplyr::filter(.data[[group_var]] == lvl)
+    xB <- sub %>% dplyr::filter(.data[[period_var]] == "B") %>% dplyr::pull(.data[[value_var]])
+    xD <- sub %>% dplyr::filter(.data[[period_var]] == "D") %>% dplyr::pull(.data[[value_var]])
+    p  <- t.test(xB, xD, var.equal = FALSE)$p.value
+    tibble::tibble(
+      variable = group_var,
+      level = as.character(lvl),
+      p_value = p,
+      p_formatted_latex = format_p_latex(p)
+    )
+  })
+}
+
+# ----- TOTAL (B vs D) -----
+p_total <- t.test(value_result ~ period, data = df, var.equal = FALSE)$p.value
+p_total_fmt <- format_p_latex(p_total)
+
+# ----- BY AGE GROUP -----
+p_age_tbl <- welch_p_by_group(df, "age_group")
+# Optional: ensure your preferred order
+p_age_tbl <- p_age_tbl %>%
+  dplyr::mutate(level = factor(level, levels = c("[18, 39]", "[40, 59]", "60+"))) %>%
+  dplyr::arrange(level)
+
+# ----- BY GENDER (restrict to F/M just in case) -----
+p_gender_tbl <- df %>%
+  dplyr::filter(gender %in% c("F","M")) %>%
+  welch_p_by_group("gender") %>%
+  dplyr::mutate(level = dplyr::recode(level, "F" = "Female", "M" = "Male")) %>%
+  dplyr::mutate(level = factor(level, levels = c("Female","Male"))) %>%
+  dplyr::arrange(level)
+
+# ----- BY SEASON -----
+p_season_tbl <- welch_p_by_group(df, "season") %>%
+  dplyr::mutate(level = factor(level, levels = c("Winter","Spring","Summer","Fall"))) %>%
+  dplyr::arrange(level)
+
+# Peek
+p_total_fmt
+p_age_tbl
+p_gender_tbl
+p_season_tbl
+
+cat(
+  "\nTOTAL mean comparison:\n  ", p_total_fmt, "\n",
+  "\nBy age:\n  ",
+  paste0(sprintf("%s: %s", as.character(p_age_tbl$level), p_age_tbl$p_formatted_latex), collapse = "\n  "),
+  "\n\nBy gender:\n  ",
+  paste0(sprintf("%s: %s", as.character(p_gender_tbl$level), p_gender_tbl$p_formatted_latex), collapse = "\n  "),
+  "\n\nBy season:\n  ",
+  paste0(sprintf("%s: %s", as.character(p_season_tbl$level), p_season_tbl$p_formatted_latex), collapse = "\n  "),
+  "\n"
+)
+
+```
+
+### 2.4 Median levels and interquartile ranges
+```{r}
+# Median and IQR for the full dataset, stratified by period
+overall_median_iqr <- df %>%
+  group_by(period) %>%
+  summarise(
+    median_value = median(value_result, na.rm = TRUE),
+    Q1 = quantile(value_result, 0.25, na.rm = TRUE),
+    Q3 = quantile(value_result, 0.75, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+print(overall_median_iqr)
+
+# Median and IQR by age group
+age_group_median_iqr <- df %>%
+  group_by(period, age_group) %>%
+  summarise(
+    median_value = median(value_result, na.rm = TRUE),
+    Q1 = quantile(value_result, 0.25, na.rm = TRUE),
+    Q3 = quantile(value_result, 0.75, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+# Median and IQR by gender
+gender_group_median_iqr <- df %>%
+  filter(gender %in% c("M", "F")) %>%
+  group_by(period, gender) %>%
+  summarise(
+    median_value = median(value_result, na.rm = TRUE),
+    Q1 = quantile(value_result, 0.25, na.rm = TRUE),
+    Q3 = quantile(value_result, 0.75, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+# Median and IQR by season
+season_group_median_iqr <- df %>%
+  group_by(period, season) %>%
+  summarise(
+    median_value = median(value_result, na.rm = TRUE),
+    Q1 = quantile(value_result, 0.25, na.rm = TRUE),
+    Q3 = quantile(value_result, 0.75, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+# Print all
+print(age_group_median_iqr)
+print(gender_group_median_iqr)
+print(season_group_median_iqr)
+
+# Overall Wilcoxon test
+overall_wilcox <- wilcox.test(value_result ~ period, data = df)
+print(overall_wilcox)
+
+# Wilcoxon test by age group
+age_group_wilcox <- df %>%
+  filter(!is.na(age_group)) %>%
+  group_by(age_group) %>%
+  summarise(
+    p_value = tryCatch(
+      wilcox.test(value_result ~ period)$p.value,
+      error = function(e) NA
+    ),
+    .groups = "drop"
+  )
+print(age_group_wilcox)
+
+# Wilcoxon test by gender
+gender_group_wilcox <- df %>%
+  filter(gender %in% c("M", "F")) %>%
+  group_by(gender) %>%
+  summarise(
+    p_value = tryCatch(
+      wilcox.test(value_result ~ period)$p.value,
+      error = function(e) NA
+    ),
+    .groups = "drop"
+  )
+print(gender_group_wilcox)
+
+# Wilcoxon test by season
+season_group_wilcox <- df %>%
+  filter(!is.na(season)) %>%
+  group_by(season) %>%
+  summarise(
+    p_value = tryCatch(
+      wilcox.test(value_result ~ period)$p.value,
+      error = function(e) NA
+    ),
+    .groups = "drop"
+  )
+print(season_group_wilcox)
+
+```
+```{r}
+# Exact p values
+
+format_p_latex <- function(p, digits = 2) {
+  if (length(p) == 0 || is.na(p)) return("$p = \\text{NA}$")
+  if (p == 0) return("$p < 1 \times 10^{-308}$")
+  s <- formatC(p, format = "e", digits = digits)  # e.g. "2.34e-47"
+  parts <- strsplit(s, "e", fixed = TRUE)[[1]]
+  base <- parts[1]; exp <- as.integer(parts[2])
+  paste0("$p = ", base, " \times 10^{", exp, "}$")
+}
+
+# Helper: Wilcoxon p-value (B vs D) per level of a categorical variable
+wilcox_p_by_group <- function(data, group_var,
+                              value_var = "value_result",
+                              period_var = "period") {
+  # iterate levels explicitly for robustness
+  levs <- data[[group_var]] %>% unique() %>% sort()
+  map_dfr(levs, function(lvl) {
+    sub <- data %>%
+      filter(!is.na(.data[[group_var]]),
+             .data[[group_var]] == lvl,
+             .data[[period_var]] %in% c("B","D"),
+             !is.na(.data[[value_var]]))
+    # need both periods present
+    have_B <- any(sub[[period_var]] == "B")
+    have_D <- any(sub[[period_var]] == "D")
+    p <- if (!have_B || !have_D) {
+      NA_real_
+    } else {
+      # exact=FALSE avoids warnings for large n / ties
+      wilcox.test(as.formula(paste(value_var, "~", period_var)),
+                  data = sub, exact = FALSE)$p.value
+    }
+    tibble(
+      variable = group_var,
+      level = as.character(lvl),
+      p_value = p,
+      p_formatted_latex = format_p_latex(p)
+    )
+  }) %>% arrange(level)
+}
+
+# ----- TOTAL (B vs D) -----
+p_total_wilcox <- wilcox.test(value_result ~ period, data = df, exact = FALSE)$p.value
+p_total_wilcox_fmt <- format_p_latex(p_total_wilcox)
+
+# ----- BY AGE -----
+p_age_wilcox <- wilcox_p_by_group(df, "age_group") %>%
+  mutate(level = factor(level, levels = c("[18, 39]", "[40, 59]", "60+"))) %>%
+  arrange(level)
+
+# ----- BY GENDER (restrict to F/M, then relabel) -----
+p_gender_wilcox <- df %>%
+  filter(gender %in% c("F","M")) %>%
+  wilcox_p_by_group("gender") %>%
+  mutate(level = recode(level, "F" = "Female", "M" = "Male"),
+         level = factor(level, levels = c("Female","Male"))) %>%
+  arrange(level)
+
+# ----- BY SEASON -----
+p_season_wilcox <- wilcox_p_by_group(df, "season") %>%
+  mutate(level = factor(level, levels = c("Winter","Spring","Summer","Fall"))) %>%
+  arrange(level)
+
+
+p_total_wilcox_fmt
+p_age_wilcox
+p_gender_wilcox
+p_season_wilcox
+
+# ----- COPY/PASTE HELP: emit LaTeX-ready strings for your table -----
+cat(
+  "\nWilcoxon p-values for median/IQR table:\n",
+  "Total: ", p_total_wilcox_fmt, "\n\n",
+  "By age:\n  ",
+  paste0(sprintf("%s: %s", as.character(p_age_wilcox$level), p_age_wilcox$p_formatted_latex), collapse = "\n  "),
+  "\n\nBy gender:\n  ",
+  paste0(sprintf("%s: %s", as.character(p_gender_wilcox$level), p_gender_wilcox$p_formatted_latex), collapse = "\n  "),
+  "\n\nBy season:\n  ",
+  paste0(sprintf("%s: %s", as.character(p_season_wilcox$level), p_season_wilcox$p_formatted_latex), collapse = "\n  "),
+  "\n"
+)
+
+```
+
+
+### 2.5 Deficiency rates for gender, age and season groups
+```{r}
+# Calculate the deficiency rates for each gender group
+deficiency_gender_groups <- df %>%
+  group_by(gender, period) %>%
+  summarise(deficient_count = sum(deficient), total_count = n(), .groups = 'drop') %>%
+  pivot_wider(
+    names_from = period,
+    values_from = c(deficient_count, total_count),
+    values_fill = list(deficient_count = 0, total_count = 0)
+  ) %>%
+  mutate(
+    rate_B = if_else(total_count_B > 0, deficient_count_B / total_count_B * 100, 0),
+    rate_D = if_else(total_count_D > 0, deficient_count_D / total_count_D * 100, 0)
+  ) %>%
+  # Calculate p-values
+  rowwise() %>%
+  mutate(p_value = chisq.test(rbind(c(deficient_count_B, total_count_B - deficient_count_B), 
+                                    c(deficient_count_D, total_count_D - deficient_count_D)))$p.value) %>%
+  ungroup()
+
+print(deficiency_gender_groups)
+```
+
+```{r}
+# Calculate the deficiency rates for each age group
+deficiency_age_groups <- df %>%
+  group_by(age_group, period) %>%
+  summarise(deficient_count = sum(deficient), total_count = n(), .groups = 'drop') %>%
+  pivot_wider(
+    names_from = period,
+    values_from = c(deficient_count, total_count),
+    values_fill = list(deficient_count = 0, total_count = 0) 
+  ) %>%
+  mutate(
+    rate_B = if_else(total_count_B > 0, deficient_count_B / total_count_B * 100, 0),
+    rate_D = if_else(total_count_D > 0, deficient_count_D / total_count_D * 100, 0)
+  ) %>%
+  rowwise() %>%
+  mutate(p_value = chisq.test(rbind(c(deficient_count_B, total_count_B - deficient_count_B), 
+                                    c(deficient_count_D, total_count_D - deficient_count_D)))$p.value) %>%
+  ungroup()
+
+print(deficiency_age_groups)
+```
+
+
+```{r}
+# Calculate the deficiency rates for each season group
+deficiency_season_groups <- df %>%
+  group_by(season, period) %>%
+  summarise(deficient_count = sum(deficient), total_count = n(), .groups = 'drop') %>%
+  pivot_wider(
+    names_from = period,
+    values_from = c(deficient_count, total_count),
+    values_fill = list(deficient_count = 0, total_count = 0)
+  ) %>%
+  mutate(
+    rate_B = if_else(total_count_B > 0, deficient_count_B / total_count_B * 100, 0),
+    rate_D = if_else(total_count_D > 0, deficient_count_D / total_count_D * 100, 0)
+  ) %>%
+  # Calculate p-values
+  rowwise() %>%
+  mutate(p_value = chisq.test(rbind(c(deficient_count_B, total_count_B - deficient_count_B), 
+                                    c(deficient_count_D, total_count_D - deficient_count_D)))$p.value) %>%
+  ungroup()
+
+print(deficiency_season_groups)
+```
+
+```{r}
+# Exact p values
+
+# LaTeX-ready scientific formatter (single backslash)
+format_p_latex <- function(p, digits = 2) {
+  if (length(p) == 0 || is.na(p)) return("$p = \\text{NA}$")
+  if (p == 0) return("$p < 1 \times 10^{-308}$")
+  s <- formatC(p, format = "e", digits = digits)   # e.g. "4.91e-118"
+  parts <- strsplit(s, "e", fixed = TRUE)[[1]]
+  base <- parts[1]; exp <- as.integer(parts[2])
+  paste0("$p = ", base, " \times 10^{", exp, "}$")
+}
+
+# Deficiency rates + chi-square p (B vs D) for each level of a grouping var
+deficiency_rates_by_group <- function(data, group_var,
+                                      period_var = "period",
+                                      deficient_var = "deficient") {
+  gsym <- sym(group_var)
+  psym <- sym(period_var)
+  dsym <- sym(deficient_var)
+
+  wide <- data %>%
+    group_by(!!gsym, !!psym) %>%
+    summarise(
+      deficient_count = sum(!!dsym, na.rm = TRUE),
+      total_count     = n(),
+      .groups = "drop"
+    ) %>%
+    tidyr::pivot_wider(
+      names_from  = !!psym,                         # <- tidy-eval (no .data)
+      values_from = c(deficient_count, total_count),
+      values_fill = list(deficient_count = 0L, total_count = 0L)
+    ) %>%
+    mutate(
+      rate_B = if_else(total_count_B > 0, 100 * deficient_count_B / total_count_B, 0),
+      rate_D = if_else(total_count_D > 0, 100 * deficient_count_D / total_count_D, 0)
+    )
+
+  out <- wide %>%
+    rowwise() %>%
+    mutate(
+      p_value = {
+        # guard against missing period columns
+        if (!all(c("deficient_count_B","total_count_B",
+                   "deficient_count_D","total_count_D") %in% names(cur_data()))) {
+          NA_real_
+        } else if (total_count_B == 0 || total_count_D == 0) {
+          NA_real_
+        } else {
+          suppressWarnings(
+            chisq.test(
+              rbind(
+                c(deficient_count_B, total_count_B - deficient_count_B),
+                c(deficient_count_D, total_count_D - deficient_count_D)
+              ),
+              correct = FALSE
+            )$p.value
+          )
+        }
+      }
+    ) %>%
+    ungroup() %>%
+    mutate(
+      p_formatted_latex = map_chr(p_value, format_p_latex)  # <- row-wise formatting
+    ) %>%
+    rename(level = !!gsym)
+
+  out
+}
+
+# ---------- TOTAL (B vs D) ----------
+def_tab_total <- df %>%
+  count(period, deficient, name = "n") %>%
+  tidyr::pivot_wider(names_from = period, values_from = n, values_fill = 0L) %>%
+  mutate(
+    B_def = `B`[deficient == 1], B_ok = `B`[deficient == 0],
+    D_def = `D`[deficient == 1], D_ok = `D`[deficient == 0]
+  ) %>%
+  summarise(
+    B_def = first(B_def) %||% 0L, B_ok = first(B_ok) %||% 0L,
+    D_def = first(D_def) %||% 0L, D_ok = first(D_ok) %||% 0L
+  )
+
+def_mat_total <- matrix(c(def_tab_total$B_def, def_tab_total$B_ok,
+                          def_tab_total$D_def, def_tab_total$D_ok),
+                        nrow = 2, byrow = TRUE)
+
+p_def_total      <- suppressWarnings(chisq.test(def_mat_total, correct = FALSE)$p.value)
+p_def_total_fmt  <- format_p_latex(p_def_total)
+
+# ---------- BY GROUP ----------
+# Age
+deficiency_age_groups <- deficiency_rates_by_group(df, "age_group") %>%
+  mutate(level = factor(level, levels = c("[18, 39]", "[40, 59]", "60+"))) %>%
+  arrange(level)
+
+# Gender (F/M only, then relabel)
+deficiency_gender_groups <- df %>%
+  filter(gender %in% c("F","M")) %>%
+  deficiency_rates_by_group("gender") %>%
+  mutate(level = recode(level, "F" = "Female", "M" = "Male"),
+         level = factor(level, levels = c("Female","Male"))) %>%
+  arrange(level)
+
+# Season
+deficiency_season_groups <- deficiency_rates_by_group(df, "season") %>%
+  mutate(level = factor(level, levels = c("Winter","Spring","Summer","Fall"))) %>%
+  arrange(level)
+
+# Quick peek (optional)
+p_def_total_fmt
+deficiency_age_groups
+deficiency_gender_groups
+deficiency_season_groups
+
+
+```
+
+
+### 2.6 Plots: Vit D levels over time
+```{r}
+# Vit D Levels Over Time (stratified by age and gender) - with Standard Error
+
+# Calculate mean and standard error for Vitamin D levels by gender and season-year
+gender_stats <- df %>%
+  group_by(season_year, gender) %>%
+  summarise(
+    mean_value = mean(value_result, na.rm = TRUE),
+    se_value = sd(value_result, na.rm = TRUE) / sqrt(n()),  # Standard error calculation
+    .groups = 'drop'
+  )
+
+# Plot Vitamin D levels over time by gender group (with standard error)
+p_gender <- ggplot(gender_stats, aes(x = season_year, y = mean_value, color = gender, fill = gender, group = gender)) +
+  geom_line(linewidth = 1) +  
+  geom_point(size = 2) +  
+  geom_ribbon(aes(ymin = mean_value - se_value, ymax = mean_value + se_value), alpha = 0.2) +  
+  labs(
+    x = "Season",
+    y = "Vitamin D Level (µg/l)"
+  ) +
+  ylim(0, 60) +  
+  theme_minimal() +
+  scale_fill_manual(values = c("M" = "blue", "F" = "red")) +  
+  scale_color_manual(values = c("M" = "blue", "F" = "red")) +
+  theme(legend.title = element_blank(), axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Calculate mean and standard error for Vitamin D levels by age group and season-year
+age_group_stats <- df %>%
+  group_by(season_year, age_group) %>%
+  summarise(
+    mean_value = mean(value_result, na.rm = TRUE),
+    se_value = sd(value_result, na.rm = TRUE) / sqrt(n()),  # Standard error calculation
+    .groups = 'drop'
+  )
+
+# Plot Vitamin D levels over time by age group (with standard error)
+p_age <- ggplot(age_group_stats, aes(x = season_year, y = mean_value, color = age_group, fill = age_group, group = age_group)) +
+  geom_line(linewidth = 1) +  
+  geom_point(size = 2) +  
+  geom_ribbon(aes(ymin = mean_value - se_value, ymax = mean_value + se_value), alpha = 0.2) +  
+  labs(
+    x = "Season",
+    y = "Vitamin D Level (µg/l)"
+  ) +
+  ylim(0, 60) + 
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set2") +  
+  scale_color_brewer(palette = "Set2") +
+  theme(legend.title = element_blank(), axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+
+```{r}
+# Vit D Levels Over Time (stratified by age and gender) - with Standard Deviation
+
+# Calculate mean and standard deviation for Vitamin D levels by gender and season-year
+gender_stats <- df %>%
+  group_by(season_year, gender) %>%
+  summarise(
+    mean_value = mean(value_result, na.rm = TRUE),
+    sd_value = sd(value_result, na.rm = TRUE), 
+    .groups = 'drop'
+  )
+
+# Plot Vitamin D levels over time by gender group (with standard deviation)
+ggplot(gender_stats, aes(x = season_year, y = mean_value, color = gender, fill = gender, group = gender)) +
+  geom_line(linewidth = 1) +  
+  geom_point(size = 2) + 
+  geom_ribbon(aes(ymin = mean_value - sd_value, ymax = mean_value + sd_value), alpha = 0.2) +  
+  labs(
+    x = "Season",
+    y = "Vitamin D Level (µg/l)"
+  ) +
+  ylim(0, 60) +  
+  theme_minimal() +
+  scale_fill_manual(values = c("M" = "blue", "F" = "red")) +  
+  scale_color_manual(values = c("M" = "blue", "F" = "red")) +
+  theme(legend.title = element_blank(), axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Calculate mean and standard deviation for Vitamin D levels by age group and season-year
+age_group_stats <- df %>%
+  group_by(season_year, age_group) %>%
+  summarise(
+    mean_value = mean(value_result, na.rm = TRUE),
+    sd_value = sd(value_result, na.rm = TRUE),  # Standard deviation calculation
+    .groups = 'drop'
+  )
+
+# Plot Vitamin D levels over time by age group (with standard deviation)
+ggplot(age_group_stats, aes(x = season_year, y = mean_value, color = age_group, fill = age_group, group = age_group)) +
+  geom_line(linewidth = 1) +  
+  geom_point(size = 2) +  
+  geom_ribbon(aes(ymin = mean_value - sd_value, ymax = mean_value + sd_value), alpha = 0.2) +  
+  labs(
+    x = "Season",
+    y = "Vitamin D Level (µg/l)"
+  ) +
+  ylim(0, 60) +  
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set2") +  
+  scale_color_brewer(palette = "Set2") +
+  theme(legend.title = element_blank(), axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+#### FIGURE S1
+```{r}
+# Vit D Levels Over Time (not stratified by age and gender)
+
+# Calculate mean and standard error for Vitamin D levels for the entire cohort by season-year
+cohort_stats <- df %>%
+  group_by(season_year) %>%
+  summarise(
+    mean_value = mean(value_result, na.rm = TRUE),
+    se_value = sd(value_result, na.rm = TRUE) / sqrt(n()),
+    sd_value = sd(value_result, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+print(cohort_stats)
+
+# Plot Vitamin D levels over time for the entire cohort with standard error ribbon
+ggplot(cohort_stats, aes(x = season_year, y = mean_value, group = 1)) +
+  geom_line(color = "#1f77b4", linewidth = 1) +  
+  geom_point(color = "#ff7f0e", size = 2) +  
+  geom_ribbon(aes(ymin = mean_value - se_value, ymax = mean_value + se_value), fill = "#ff7f0e", alpha = 0.2) +  
+  labs(
+    x = "Season",
+    y = "Vitamin D Level (µg/l)",
+  ) +
+  ylim(0, 60) + 
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold")
+  )
+
+
+# Plot Vitamin D levels over time for the entire cohort with standard deviation ribbon
+ggplot(cohort_stats, aes(x = season_year, y = mean_value, group = 1)) +
+  geom_line(color = "#1f77b4", linewidth = 1) +  
+  geom_point(color = "#ff7f0e", size = 2) +  
+  geom_ribbon(aes(ymin = mean_value - sd_value, ymax = mean_value + sd_value), fill = "#ff7f0e", alpha = 0.2) +  
+  labs(
+    x = "Season",
+    y = "Vitamin D Level (µg/l)",
+  ) +
+  ylim(0, 60) +  
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold")
+  )
+
+
+```
+
+### 2.7 FIGURE S2: Plots: Early vs. late pandemic
+
+```{r}
+# Define early and late pandemic periods
+early_period <- df %>%
+  filter(test_date >= as.Date("2020-03-01") & test_date <= as.Date("2020-08-31")) %>%
+  mutate(pandemic_phase = "Early Pandemic")
+
+late_period <- df %>%
+  filter(test_date >= as.Date("2021-09-01") & test_date <= as.Date("2022-02-28")) %>%
+  mutate(pandemic_phase = "Late Pandemic")
+
+# Combine into one dataset
+pandemic_comparison_df <- bind_rows(early_period, late_period)
+
+# Summary statistics
+pandemic_summary <- pandemic_comparison_df %>%
+  group_by(pandemic_phase) %>%
+  summarise(
+    n = n(),
+    mean_vitamin_d = mean(value_result, na.rm = TRUE),
+    sd_vitamin_d = sd(value_result, na.rm = TRUE),
+    median_vitamin_d = median(value_result, na.rm = TRUE),
+    iqr_vitamin_d = IQR(value_result, na.rm = TRUE)
+  )
+
+print(pandemic_summary)
+
+# Statistical testing
+t_test_pandemic <- t.test(value_result ~ pandemic_phase, data = pandemic_comparison_df)
+wilcox_test_pandemic <- wilcox.test(value_result ~ pandemic_phase, data = pandemic_comparison_df, exact = FALSE)
+
+cat("T-test p-value:", t_test_pandemic$p.value, "\n")
+cat("Wilcoxon test p-value:", wilcox_test_pandemic$p.value, "\n")
+
+# Define matching colors
+pandemic_colors <- c("Early Pandemic" = "#1f77b4", "Late Pandemic" = "#ff7f0e")
+
+# Determine significance stars based on Wilcoxon test
+signif_star <- if (wilcox_test_pandemic$p.value < 0.001) {
+  "***"
+} else if (wilcox_test_pandemic$p.value < 0.01) {
+  "**"
+} else if (wilcox_test_pandemic$p.value < 0.05) {
+  "*"
+} else {
+  "n.s."
+}
+
+# Boxplot with y-axis cropped and significance stars
+p_pandemic_box <- ggplot(pandemic_comparison_df, aes(x = pandemic_phase, y = value_result, fill = pandemic_phase)) +
+  geom_boxplot(width = 0.5, alpha = 0.8, outlier.shape = NA) +
+  ylim(NA, 75) +  # Crop y-axis at 75
+  
+  # Add significance annotation
+  annotate("text", x = 1.5, y = 73, label = signif_star, size = 6, fontface = "bold") +
+  annotate("segment", x = 1, xend = 2, y = 70, yend = 70) +  # horizontal line
+  annotate("segment", x = 1, xend = 1, y = 70, yend = 68) +  # left vertical
+  annotate("segment", x = 2, xend = 2, y = 70, yend = 68) +  # right vertical
+  
+  # Labels and colors
+  labs(
+    x = "Pandemic Phase",
+    y = "Vitamin D Level (µg/l)",
+    fill = "Pandemic Phase"
+  ) +
+  scale_fill_manual(values = pandemic_colors, aesthetics = c("fill", "color")) +
+  
+  # Theme settings
+  theme_classic() +
+  theme(
+    text = element_text(size = 10),
+    legend.text = element_text(size = 8),
+    panel.grid.major.y = element_line(color = "grey90", size = 0.2),
+    panel.grid.minor.y = element_line(color = "grey95", size = 0.1),
+    legend.position = "top",
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text = element_text(face = "bold", size = 12),
+    plot.title = element_text(size = 14, hjust = 0.5, face = "bold")
+  )
+
+p_pandemic_box
+```
+
+
+### 2.8 FIGURE 3: Comparison Vit D levels before and during the pandemic
+
+```{r}
+# helper to format p in scientific notation with superscript exponent
+format_p <- function(p, digits = 2) {
+  sup <- c("0"="⁰","1"="¹","2"="²","3"="³","4"="⁴","5"="⁵",
+           "6"="⁶","7"="⁷","8"="⁸","9"="⁹","-"="⁻","+"="⁺")
+  to_sup <- function(n) {
+    s <- strsplit(as.character(n), "")[[1]]
+    paste0(sup[s], collapse = "")
+  }
+  fmt_one <- function(x) {
+    if (is.na(x)) return(NA_character_)
+    s <- formatC(x, format = "e", digits = digits)     # e.g., "5.60e-18"
+    parts <- strsplit(s, "e")[[1]]
+    mant  <- parts[1]
+    expo  <- as.integer(parts[2])
+    paste0("p = ", mant, " × 10", to_sup(expo))
+  }
+  vapply(p, fmt_one, character(1))
+}
+
+# --- data prep (same filtering as before) ------------------------------------
+df_filtered <- df %>%
+  dplyr::filter(value_result >= 0, value_result <= 70) %>%
+  dplyr::mutate(gender_age_group = paste(gender, age_group, sep = " - "))
+
+# Welch two-sided t-test per subgroup (B vs D)
+t_test_gender_age_group <- df_filtered %>%
+  dplyr::group_by(gender_age_group) %>%
+  dplyr::summarise(
+    p_value = t.test(value_result[period == "B"],
+                     value_result[period == "D"],
+                     na.rm = TRUE)$p.value,
+    .groups = "drop"
+  ) %>%
+  dplyr::mutate(p_label = format_p(p_value))
+
+# mean changes for facet captions
+gender_age_group_changes <- df_filtered %>%
+  dplyr::group_by(gender_age_group, period) %>%
+  dplyr::summarise(mean_value = mean(value_result, na.rm = TRUE), .groups = "drop") %>%
+  tidyr::pivot_wider(names_from = period, values_from = mean_value) %>%
+  dplyr::rename(mean_B = B, mean_D = D) %>%
+  dplyr::mutate(
+    absolute_change  = mean_D - mean_B,
+    percentage_change = (mean_D - mean_B) / mean_B * 100
+  )
+
+# merge in p labels and build 3-line facet labels
+facet_info <- dplyr::left_join(gender_age_group_changes, t_test_gender_age_group,
+                               by = "gender_age_group")
+
+facet_labels <- setNames(
+  paste0(
+    facet_info$gender_age_group,
+    "\nAbs. Change: ", round(facet_info$absolute_change, 2), " µg/l;\n ",
+    "Rel. Change: ", round(facet_info$percentage_change, 1), "%\n",
+    facet_info$p_label
+  ),
+  facet_info$gender_age_group
+)
+
+# --- plot (unchanged geometry; p-values now live in the strip label) ---------
+p_gender_age_violin_box <- ggplot(df_filtered, aes(x = period, y = value_result, fill = period)) +
+  geom_violin(position = position_dodge(width = 0.8), width = 0.6, trim = FALSE) +
+  geom_boxplot(position = position_dodge(width = 0.8), width = 0.15, alpha = 0.5, outlier.shape = NA) +
+  stat_summary(fun.data = "mean_sdl", geom = "pointrange", position = position_dodge(width = 0.8)) +
+  labs(x = "Period", y = "Vitamin D Level (µg/l)") +
+  theme_minimal() +
+  scale_fill_manual(values = c("B" = "#1f77b4", "D" = "#ff7f0e"),
+                    name = "Period",
+                    labels = c("B" = "Pre-Pandemic", "D" = "Pandemic")) +
+  theme(
+    legend.title = element_blank(),
+    strip.text = element_text(size = 7),     # same style for all three lines in strip
+    axis.text.x = element_blank(),
+    axis.ticks.length = unit(0.2, "cm")
+  ) +
+  facet_wrap(~ gender_age_group, scales = "free", labeller = as_labeller(facet_labels))
+
+print(p_gender_age_violin_box)
+
+```
+
+
+### 2.9 FIGURE S3: Plots: Seasonality 
+
+```{r}
+# Filter data to remove outliers (values below 0 or above 70)
+df_filtered <- df %>%
+  filter(value_result >= 0 & value_result <= 70)
+
+# Prepare the data for the updated plot
+season_year_stats <- df_filtered %>%
+  filter(!(cohort_year == 2018 & season == "Winter")) %>% # Exclude Winter 2018
+  mutate(
+    cohort_year = factor(cohort_year),  
+    period_label = case_when(
+      period == "B" ~ "Pre-Pandemic",
+      period == "D" ~ "Pandemic",
+      TRUE ~ NA_character_
+    ),
+    period_label = factor(period_label, levels = c("Pre-Pandemic", "Pandemic"))
+  )
+
+# Calculate mean and median differences between pre-pandemic and pandemic periods for each season
+seasonal_changes <- season_year_stats %>%
+  group_by(season, period_label) %>%
+  summarise(
+    mean_value = mean(value_result, na.rm = TRUE),
+    median_value = median(value_result, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_wider(
+    names_from = period_label, 
+    values_from = c(mean_value, median_value)
+  ) %>%
+  rename(
+    mean_value_Pre_Pandemic = `mean_value_Pre-Pandemic`,
+    mean_value_Pandemic = `mean_value_Pandemic`,
+    median_value_Pre_Pandemic = `median_value_Pre-Pandemic`,
+    median_value_Pandemic = `median_value_Pandemic`
+  ) %>%
+  mutate(
+    mean_diff = mean_value_Pandemic - mean_value_Pre_Pandemic,
+    median_diff = median_value_Pandemic - median_value_Pre_Pandemic
+  )
+
+seasonal_changes <- seasonal_changes %>%
+  dplyr::select(season, mean_diff) %>%
+  mutate(mean_diff = round(mean_diff, 2))
+
+# Create facet labels with mean difference included
+facet_labels <- setNames(
+  paste0(c("Winter", "Spring", "Summer", "Fall"), "\nMean Diff: ", seasonal_changes$mean_diff),
+  c("Winter", "Spring", "Summer", "Fall")
+)
+
+# Updated plot with mean difference in facet labels
+p_seasonal_violin_box <- ggplot(season_year_stats, aes(x = cohort_year, y = value_result, fill = period_label)) +
+  geom_violin(alpha = 0.8, trim = TRUE, scale = "width", position = position_dodge(width = 0.8)) +
+  geom_boxplot(width = 0.2, position = position_dodge(width = 0.8), alpha = 0.6, outlier.shape = NA) + 
+  facet_wrap(~ season, ncol = 2, labeller = as_labeller(facet_labels)) +
+  geom_vline(
+  xintercept = seq_along(unique(season_year_stats$cohort_year)) - 0.5,
+  color = "grey85",
+  linetype = "dashed",
+  size = 0.3
+) +
+  
+  # Labels and colors
+  labs(
+    x = "Year",
+    y = "Vitamin D Level (µg/l)",
+    fill = "Period"
+  ) +
+  scale_fill_manual(
+  values = c("Pre-Pandemic" = "#1f77b4", "Pandemic" = "#ff7f0e"),
+  aesthetics = c("fill", "color")
+) +
+  
+  # Adjust theme
+  theme_classic() +
+  theme(
+    text = element_text(size = 10),
+    legend.text = element_text(size = 8),
+    panel.grid.major.y = element_line(color = "grey90", size = 0.2),
+    panel.grid.minor.y = element_line(color = "grey95", size = 0.1),
+    legend.position = "top",
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text = element_text(face = "bold", size = 12),
+    plot.title = element_text(size = 14, hjust = 0.5, face = "bold")
+  )
+
+print(p_seasonal_violin_box)
+
+```
+
+## 3. Propensity score matching (PSM)
+
+### 3.1 Matching
+```{r}
+# performing exact matching parameters on the entire sample
+test_match_obj <- matchit(period ~ age_group + gender + test_month, data = df, method = "nearest", distance = "glm", exact = c("gender", "age_group", "test_month")) 
+
+matched_data <- match.data(test_match_obj)
+
+# Calculate the sample sizes
+original_size <- nrow(df)  # Total original sample size
+matched_size <- nrow(matched_data)  # Total matched sample size
+
+# Calculate the number and percentage of observations lost
+num_lost <- original_size - matched_size
+percent_lost <- (num_lost / original_size) * 100
+
+# Print results
+cat("Original Sample Size: ", original_size, "\n")
+cat("Matched Sample Size: ", matched_size, "\n")
+cat("Number of Observations Lost: ", num_lost, "\n")
+cat("Percentage Lost: ", percent_lost, "%\n")
+
+# Summary
+summary(test_match_obj)
+```
+#### 3.1.1 Statistical testing
+
+```{r}
+# Calculate summaries for Age with Chi-squared Test for Independence
+age_summary <- matched_data %>%
+  group_by(period, age_group) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  group_by(period) %>%
+  mutate(percentage = count / sum(count) * 100)
+
+# Conduct Chi-squared Test and append the result
+age_table <- xtabs(count ~ period + age_group, data = age_summary)
+age_chi_sq_test <- tryCatch(chisq.test(age_table), error = function(e) e)
+age_p_value <- ifelse(class(age_chi_sq_test) == "try-error", NA, age_chi_sq_test$p.value)
+
+# Calculate summaries for Gender with Chi-squared Test
+gender_summary <- matched_data %>%
+  group_by(period, gender) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  group_by(period) %>%
+  mutate(percentage = count / sum(count) * 100)
+
+# Conduct Chi-squared Test and append the result
+gender_table <- xtabs(count ~ period + gender, data = gender_summary)
+gender_chi_sq_test <- tryCatch(chisq.test(gender_table), error = function(e) e)
+gender_p_value <- ifelse(class(gender_chi_sq_test) == "try-error", NA, gender_chi_sq_test$p.value)
+
+# Calculate summaries for Test month with Chi-squared Test
+test_month_summary <- matched_data %>%
+  group_by(period, test_month) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  group_by(period) %>%
+  mutate(percentage = count / sum(count) * 100)
+
+# Conduct Chi-squared Test and append the result
+test_month_table <- xtabs(count ~ period + test_month, data = test_month_summary)
+test_month_chi_sq_test <- tryCatch(chisq.test(test_month_table), error = function(e) e)
+test_month_p_value <- ifelse(class(test_month_chi_sq_test) == "try-error", NA, test_month_chi_sq_test$p.value)
+
+# Calculate summaries for Season with Chi-squared Test
+season_summary <- matched_data %>%
+  group_by(period, season) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  group_by(period) %>%
+  mutate(percentage = count / sum(count) * 100)
+
+# Conduct Chi-squared Test and append the result
+season_table <- xtabs(count ~ period + season, data = season_summary)
+season_chi_sq_test <- tryCatch(chisq.test(season_table), error = function(e) e)
+season_p_value <- ifelse(class(season_chi_sq_test) == "try-error", NA, season_chi_sq_test$p.value)
+
+# Calculate mean and standard deviation for Vitamin D levels and perform t-test
+vitamin_d_summary <- matched_data %>%
+  group_by(period) %>%
+  summarise(
+    mean_vitamin_d = mean(value_result, na.rm = TRUE),
+    sd_vitamin_d = sd(value_result, na.rm = TRUE),
+    .groups = 'drop'
+  )
+vitamin_d_t_test <- t.test(value_result ~ period, data = matched_data)
+vitamin_d_p_value <- vitamin_d_t_test$p.value
+
+# Calculate the percentage of deficiencies for each period and perform Chi-squared Test
+deficiency_summary <- matched_data %>%
+  group_by(period) %>%
+  summarise(
+    total = n(),
+    deficient_count = sum(deficient == 1, na.rm = TRUE),
+    non_deficient_count = sum(deficient == 0, na.rm = TRUE),
+    deficiency_rate = deficient_count / total * 100,
+    .groups = 'drop'
+  )
+
+# Create a contingency table for the Chi-squared test
+deficiency_table <- xtabs(~ period + deficient, data = matched_data)
+
+# Conduct Chi-squared Test and append the result
+deficiency_chi_sq_test <- tryCatch(chisq.test(deficiency_table), error = function(e) e)
+deficiency_p_value <- ifelse(class(deficiency_chi_sq_test) == "try-error", NA, deficiency_chi_sq_test$p.value)
+
+# Print the summaries and p-values
+print(age_summary)
+print(paste("Age Group P-value:", age_p_value))
+print(gender_summary)
+print(paste("Gender P-value:", gender_p_value))
+print(test_month_summary)
+print(paste("Test Month P-value:", test_month_p_value))
+print(season_summary)
+print(paste("Season P-value:", season_p_value))
+print(vitamin_d_summary)
+print(paste("Vitamin D Levels P-value:", vitamin_d_p_value))
+print(deficiency_summary)
+print(paste("Deficiency Rate P-value:", deficiency_p_value))
+
+```
+```{r}
+# Exact p values
+
+# LaTeX-ready formatter
+format_p_latex <- function(p, digits = 2) {
+  if (length(p) == 0 || is.na(p)) return("$p = \\text{NA}$")
+  if (p == 0) return("$p < 1 \times 10^{-308}$")
+  s <- formatC(p, format = "e", digits = digits)  # e.g. "2.34e-47"
+  parts <- strsplit(s, "e", fixed = TRUE)[[1]]
+  base <- parts[1]; exp <- as.integer(parts[2])
+  paste0("$p = ", base, " \times 10^{", exp, "}$")
+}
+
+# --- Vitamin D levels (Welch t-test B vs D) ---
+vitamin_d_t_test <- tryCatch(
+  t.test(value_result ~ period, data = matched_data, var.equal = FALSE),
+  error = function(e) e
+)
+vitamin_d_p_value <- if (inherits(vitamin_d_t_test, "htest")) vitamin_d_t_test$p.value else NA_real_
+vitamin_d_p_latex <- format_p_latex(vitamin_d_p_value)
+
+# --- Deficiency rate (Pearson χ² on 2x2; no Yates correction) ---
+def_table <- tryCatch(
+  xtabs(~ period + deficient, data = matched_data),
+  error = function(e) e
+)
+
+def_chi <- if (!inherits(def_table, "error")) {
+  tryCatch(chisq.test(def_table, correct = FALSE), error = function(e) e)
+} else def_table
+
+deficiency_p_value <- if (inherits(def_chi, "htest")) def_chi$p.value else NA_real_
+deficiency_p_latex <- format_p_latex(deficiency_p_value)
+
+cat(
+  "\nLaTeX-ready p-values (matched analysis):\n",
+  "Vitamin D levels: ", vitamin_d_p_latex, "\n",
+  "Deficiency rate:  ", deficiency_p_latex, "\n",
+  sep = ""
+)
+
+```
+
+
+
+#### 3.1.2 Effect size (SMD) - Mean vitamin D levels
+
+```{r}
+# Effect Size
+
+# Calculate means and SDs for matched data
+mean_matched_b <- mean(matched_data$value_result[matched_data$period == "B"])
+mean_matched_d <- mean(matched_data$value_result[matched_data$period == "D"])
+sd_matched_b <- sd(matched_data$value_result[matched_data$period == "B"])
+sd_matched_d <- sd(matched_data$value_result[matched_data$period == "D"])
+
+# Pooled SD for matched data
+n1_matched <- nrow(matched_data[matched_data$period == "B", ])
+n2_matched <- nrow(matched_data[matched_data$period == "D", ])
+sd_matched_pooled <- sqrt(((n1_matched - 1) * sd_matched_b^2 + 
+                           (n2_matched - 1) * sd_matched_d^2) / 
+                          (n1_matched + n2_matched - 2))
+
+# SMD (flipped sign for "During - Before")
+smd <- (mean_matched_d - mean_matched_b) / sd_matched_pooled  # Flips the direction
+print(paste("Standardized Mean Difference (SMD):", round(smd, 4)))
+
+# Standard error for SMD (same formula as Cohen's d)
+se_smd <- sqrt((n1 + n2) / (n1 * n2) + (smd^2) / (2 * (n1 + n2)))
+
+# Confidence intervals
+ci_99_lower_smd <- smd - z_99 * se_smd
+ci_99_upper_smd <- smd + z_99 * se_smd
+
+ci_95_lower_smd <- smd - z_95 * se_smd  
+ci_95_upper_smd <- smd + z_95 * se_smd  
+
+# Print results
+cat("99% CI for SMD:", ci_99_lower_smd, "to", ci_99_upper_smd, "\n")
+cat("95% CI for SMD:", ci_95_lower_smd, "to", ci_95_upper_smd, "\n")  
+
+# Note: Confidence intervals for the Standardized Mean Difference (SMD) are calculated using the formula:CI = SMD ± Z * SE_SMD where Z is the Z-score for the desired confidence level (e.g., 1.960 for 95%, 2.576 for 99%), and SE_SMD is the standard error of the SMD estimate.
+```
+
+#### 3.1.3 Effect size (SMD) - vitamin D deficiency rate
+
+```{r}
+# Ensure sample sizes are numeric to avoid integer overflow
+n1_matched_def <- as.numeric(nrow(matched_data[matched_data$period == "B", ]))
+n2_matched_def <- as.numeric(nrow(matched_data[matched_data$period == "D", ]))
+
+# Compute means and standard deviations for matched deficiency rates
+mean_matched_b_def <- mean(matched_data$deficient[matched_data$period == "B"])
+mean_matched_d_def <- mean(matched_data$deficient[matched_data$period == "D"])
+sd_matched_b_def <- sd(matched_data$deficient[matched_data$period == "B"])
+sd_matched_d_def <- sd(matched_data$deficient[matched_data$period == "D"])
+
+# Pooled SD for matched deficiency data
+sd_matched_pooled_def <- sqrt(((n1_matched_def - 1) * sd_matched_b_def^2 + 
+                               (n2_matched_def - 1) * sd_matched_d_def^2) / 
+                              (n1_matched_def + n2_matched_def - 2))
+
+# SMD for deficiency (flipped sign for "During - Before")
+smd_def <- (mean_matched_d_def - mean_matched_b_def) / sd_matched_pooled_def
+print(paste("SMD for deficiency:", round(smd_def, 4)))
+
+# Standard error for SMD
+se_smd_def <- sqrt((n1_matched_def + n2_matched_def) / (n1_matched_def * n2_matched_def) + (smd_def^2) / (2 * (n1_matched_def + n2_matched_def)))
+
+# Confidence intervals for SMD
+ci_99_lower_smd_def <- smd_def - z_99 * se_smd_def
+ci_99_upper_smd_def <- smd_def + z_99 * se_smd_def
+ci_95_lower_smd_def <- smd_def - z_95 * se_smd_def
+ci_95_upper_smd_def <- smd_def + z_95 * se_smd_def
+
+# Print results
+cat("99% CI for SMD:", ci_99_lower_smd_def, "to", ci_99_upper_smd_def, "\n")
+cat("95% CI for SMD:", ci_95_lower_smd_def, "to", ci_95_upper_smd_def, "\n")
+
+# Note: Confidence intervals for the Standardized Mean Difference (SMD) are calculated using the formula:CI = SMD ± Z * SE_SMD where Z is the Z-score for the desired confidence level (e.g., 1.960 for 95%, 2.576 for 99%), and SE_SMD is the standard error of the SMD estimate.
+```
+
+
+## 4.Causal Machine Learning: Random Forest ON UNMATCHED DATA
+
+### 4.1 Change in mean vitamin D levels
+```{r}
+# Treatment indicator
+df$treatment <- ifelse(df$period == "D", 1, 0)
+
+# Create design matrix from categorical variables
+X <- model.matrix(~ age_group + gender + season, data = df)[, -1]  # Remove intercept column
+
+# Outcome
+Y <- df$value_result
+
+# Run causal forest
+cf_model <- causal_forest(
+  X = X,
+  Y = Y,
+  W = df$treatment,
+  num.trees = 2000
+)
+
+# Average Treatment Effect (ATE)
+ate_result <- average_treatment_effect(cf_model, target.sample = "all")
+ate_estimate <- ate_result[1]
+ate_std_err <- ate_result[2]
+
+# Pre-pandemic average
+average_value_result <- df %>%
+  filter(period == "B") %>%
+  summarise(avg_value = mean(value_result, na.rm = TRUE)) %>%
+  pull(avg_value)
+
+# Print results
+cat("ATE Estimate:", round(ate_estimate, 4), "\n")
+cat("Percentage change:", round((ate_estimate / average_value_result) * 100, 2), "%\n")
+
+# Confidence intervals
+z_95 <- 1.960
+z_99 <- 2.576
+
+ci_99_lower_ate <- ate_estimate - z_99 * ate_std_err
+ci_99_upper_ate <- ate_estimate + z_99 * ate_std_err
+
+ci_95_lower_ate <- ate_estimate - z_95 * ate_std_err
+ci_95_upper_ate <- ate_estimate + z_95 * ate_std_err
+
+cat("99% CI for ATE:", round(ci_99_lower_ate, 4), "to", round(ci_99_upper_ate, 4), "\n")
+cat("95% CI for ATE:", round(ci_95_lower_ate, 4), "to", round(ci_95_upper_ate, 4), "\n")
+
+# Note: Confidence intervals for the ATE estimate are calculated using the formula: CI = ATE ± Z * SE_ATE where Z is the Z-score for the desired confidence level (e.g., 1.960 for 95%, 2.576 for 99%), and SE_ATE is the standard error of the ATE estimate.
+```
+
+#### 4.1.1 FIGURE 5b: Feature importance
+
+```{r}
+# Variable importance for each dummy variable
+importance <- variable_importance(cf_model)
+
+# Get column names from the design matrix
+X_names <- colnames(X)
+
+# Combine dummy variable importances by original variable
+grouped_importance <- data.frame(variable = X_names, importance = importance) %>%
+  mutate(group = case_when(
+    grepl("^age_group", variable) ~ "Age Group",
+    grepl("^gender", variable) ~ "Gender",
+    grepl("^season", variable) ~ "Season"
+  )) %>%
+  group_by(group) %>%
+  summarise(total_importance = sum(importance)) %>%
+  ungroup() %>%
+  mutate(percentage = (total_importance / sum(total_importance)) * 100)
+
+# Plot aggregated feature importance
+ggplot(grouped_importance, aes(x = reorder(group, total_importance), y = percentage, fill = group)) +
+  geom_bar(stat = "identity", color = "black", width = 0.7) +
+  geom_text(aes(label = sprintf("%.1f%%", percentage)), hjust = -0.2, size = 5) +
+  labs(
+    x = "Covariate",
+    y = "Feature importance (explained variance in %)"
+  ) +
+  scale_fill_manual(values = c("Age Group" = "#1f77b4", "Gender" = "#1f77b4", "Season" = "#1f77b4")) +
+  coord_flip() +
+  ylim(0, 80) +
+  theme_classic() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+    axis.text.x = element_text(size = 12),
+    axis.text.y = element_text(size = 12),
+    axis.title.x = element_text(size = 14),
+    axis.title.y = element_text(size = 14),
+    legend.position = "none"
+  )
+
+```
+#### 4.1.2 FIGURE 5a: Subgroup Analysis - for each subgroup
+
+```{r}
+# Build dummy matrix once (no intercept)
+X_full <- model.matrix(~ age_group + gender + season, data = df)[, -1]
+
+# Helper: builds X for a subset, drops any constant columns
+build_X_subset <- function(subset_df) {
+  X_sub <- model.matrix(~ age_group + gender + season, data = subset_df)[, -1]
+  # Drop columns that are constant within the subset (not informative)
+  X_sub <- X_sub[, apply(X_sub, 2, var) != 0, drop = FALSE]
+  return(X_sub)
+}
+
+# Function to run causal forest on a subset
+run_causal_forest <- function(subset_df) {
+  X_sub <- build_X_subset(subset_df)
+  
+  cf_model <- causal_forest(
+    X = X_sub,
+    Y = subset_df$value_result,
+    W = subset_df$treatment,
+    num.trees = 2000
+  )
+  
+  # ATE estimate and CI
+  ate <- average_treatment_effect(cf_model)
+  ate_est <- ate[1]
+  ate_se <- ate[2]
+  
+  z_99 <- 2.576
+  z_95 <- 1.960
+  
+  ci_99 <- c(ate_est - z_99 * ate_se, ate_est + z_99 * ate_se)
+  ci_95 <- c(ate_est - z_95 * ate_se, ate_est + z_95 * ate_se)
+  
+  avg_pre <- 26.3  # or calculate dynamically
+  pct_change <- (ate_est / avg_pre) * 100
+  
+  data.frame(
+    Category = "",
+    ATE_Estimate = round(ate_est, 4),
+    CI_Lower_99 = round(ci_99[1], 4),
+    CI_Upper_99 = round(ci_99[2], 4),
+    CI_Lower_95 = round(ci_95[1], 4),
+    CI_Upper_95 = round(ci_95[2], 4),
+    Percentage_Change = round(pct_change, 2)
+  )
+}
+
+# Run subgroup analyses
+age_group_results <- lapply(unique(df$age_group), function(age) {
+  sub <- df[df$age_group == age, ]
+  res <- run_causal_forest(sub)
+  res$Category <- paste("Age Group:", age)
+  res
+})
+
+gender_results <- lapply(unique(df$gender), function(g) {
+  sub <- df[df$gender == g, ]
+  res <- run_causal_forest(sub)
+  res$Category <- paste("Gender:", g)
+  res
+})
+
+season_results <- lapply(unique(df$season), function(s) {
+  sub <- df[df$season == s, ]
+  res <- run_causal_forest(sub)
+  res$Category <- paste("Season:", s)
+  res
+})
+
+# Combine all results
+final_results <- do.call(rbind, c(age_group_results, gender_results, season_results))
+print(final_results)
+
+```
+
+```{r}
+# Adjust the order for seasons
+season_order <- c("Season: Fall", "Season: Summer", "Season: Spring", "Season: Winter")
+
+# Set factor levels for the Category column
+final_results$Category <- factor(
+  final_results$Category,
+  levels = c(season_order, setdiff(unique(final_results$Category), season_order))
+)
+
+forest_plot <- ggplot(final_results, aes(x = Category, y = ATE_Estimate)) +
+  # Add the points for ATE estimates
+  geom_point(size = 5, shape = 21, fill = "black", color = "black", stroke = 0.5) +
+  
+  # Add 99% CI as the longest bars
+  geom_linerange(aes(ymin = CI_Lower_99, ymax = CI_Upper_99), size = 1.0, color = "black") +
+  
+  # Add 95% CI as shorter bars
+  geom_linerange(aes(ymin = CI_Lower_95, ymax = CI_Upper_95), size = 2.0, color = "firebrick") +
+  
+  # Add a dashed line at 0 for reference
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  
+  # Flip coordinates for horizontal plot
+  coord_flip() +
+  
+  # Labels and theme
+  labs(
+    x = "Subgroup category",
+    y = "Estimated reduction (in µg/l)"  
+  ) +
+  theme_classic(base_size = 16) +  # Increased base font size
+  theme(
+    axis.text.x = element_text(hjust = 0.5, size = 14),  
+    axis.text.y = element_text(size = 14),
+    plot.title = element_text(hjust = 0.5, size = 18, face = "bold"),
+    panel.grid.major.y = element_line(color = "grey80"),
+    panel.grid.minor.y = element_blank()
+  )
+
+# Display the updated plot
+print(forest_plot)
+```
+
+#### 4.1.3 FIGURE 4a: Comparison of effect sizes across all 3 methods used
+```{r}
+# Cohens d and SMD are standardized, transform back by multiplying with pooled SD
+
+# Calculate pooled SD for original data
+s_pooled <- sqrt(((n1 - 1) * sd_b^2 + (n2 - 1) * sd_d^2) / (n1 + n2 - 2))
+
+# ATE from Cohen's d
+ate_from_cohens_d <- cohens_d * s_pooled
+
+# ATE confidence intervals for Cohen's d (95% instead of 90%)
+ci_99_lower_ate_d <- ci_99_lower_d * s_pooled
+ci_99_upper_ate_d <- ci_99_upper_d * s_pooled
+ci_95_lower_ate_d <- ci_95_lower_d * s_pooled
+ci_95_upper_ate_d <- ci_95_upper_d * s_pooled
+
+# ATE from SMD
+ate_from_smd <- smd * s_pooled
+
+# ATE confidence intervals for SMD (95% instead of 90%)
+ci_99_lower_ate_smd <- ci_99_lower_smd * s_pooled
+ci_99_upper_ate_smd <- ci_99_upper_smd * s_pooled
+ci_95_lower_ate_smd <- ci_95_lower_smd * s_pooled
+ci_95_upper_ate_smd <- ci_95_upper_smd * s_pooled
+
+# Create updated data frame with recalculated ATE values
+effect_sizes_updated <- data.frame(
+  Category = c("Cohen's d", "SMD (PSM)", "ATE (ML)"),
+  Estimate = c(ate_from_cohens_d, ate_from_smd, ate_estimate),
+  CI_Lower_99 = c(ci_99_lower_ate_d, ci_99_lower_ate_smd, ci_99_lower_ate),
+  CI_Upper_99 = c(ci_99_upper_ate_d, ci_99_upper_ate_smd, ci_99_upper_ate),
+  CI_Lower_95 = c(ci_95_lower_ate_d, ci_95_lower_ate_smd, ci_95_lower_ate),
+  CI_Upper_95 = c(ci_95_upper_ate_d, ci_95_upper_ate_smd, ci_95_upper_ate)
+)
+
+# Reorder the Category levels to match the new desired order (Cohen’s d on top, ATE ML at bottom)
+effect_sizes_updated$Category <- factor(effect_sizes_updated$Category, levels = c("Cohen's d", "SMD (PSM)", "ATE (ML)"))
+
+# Create the forest plot with overlapping whiskers for CIs
+forest_plot_updated <- ggplot(effect_sizes_updated, aes(x = Category, y = Estimate)) +
+  # Add points for the ATE estimates
+  geom_point(size = 5, shape = 21, fill = "black", color = "black", stroke = 0.5) +
+  
+  # Add 99% CI as the longest bars
+  geom_linerange(aes(ymin = CI_Lower_99, ymax = CI_Upper_99), size = 1.0, color = "black") +
+  
+  # Add 95% CI as shorter bars
+  geom_linerange(aes(ymin = CI_Lower_95, ymax = CI_Upper_95), size = 2.0, color = "firebrick") +
+  
+  # Add a dashed line at 0 for reference
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  
+  # Flip coordinates for horizontal orientation
+  coord_flip() +
+  
+  # Labels and theme
+  labs(
+    y = "Estimated effect size (in µg/l)",  # Updated y-axis label
+    x = NULL  # Remove x-axis label
+  ) +
+  theme_classic(base_size = 16) +  # Set a clean, classic theme
+  theme(
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 14),
+    plot.title = element_text(size = 18, face = "bold"),
+    panel.grid.major.y = element_line(color = "grey80"),
+    panel.grid.minor.y = element_blank()
+  )
+
+# Display the updated plot
+print(forest_plot_updated)
+
+```
+
+
+
+#### 4.1.4 Sensitivity analysis with sensemakr
+
+```{r}
+# since sensemakr works directly with linear regression models, we need to approximate the causal forest results in a linear regression framework
+
+# Dummy encode with cleaned column names
+X_lm <- model.matrix(~ age + gender + season, data = df)[, -1]
+
+# Clean up problematic characters in column names
+colnames(X_lm) <- make.names(colnames(X_lm))
+
+# Combine into final data frame
+df_linear <- cbind(value_result = df$value_result, treatment = df$treatment, X_lm)
+
+# Build the formula dynamically
+predictor_vars <- colnames(df_linear)[-1]  # exclude response
+formula_str <- paste("value_result ~", paste(predictor_vars, collapse = " + "))
+formula_obj <- as.formula(formula_str)
+
+# Fit the linear regression model
+linear_model <- lm(formula_obj, data = as.data.frame(df_linear))
+
+# Summarize
+summary(linear_model)
+
+
+```
+
+```{r}
+# Identify which covariates to use as benchmarks (all except treatment)
+benchmark_vars <- setdiff(colnames(df_linear), c("value_result", "treatment"))
+
+# Run sensitivity analysis with the correct variable names
+sensitivity_analysis <- sensemakr(
+  model = linear_model,
+  treatment = "treatment", 
+  benchmark_covariates = benchmark_vars,  # use actual dummy names
+  kd = 1
+)
+
+# Summarize results
+summary(sensitivity_analysis)
+```
+#### 4.1.5 Weighted ASMD Analysis
+```{r}
+df$period <- as.factor(df$period)
+
+# Convert categorical variables to numeric for mean calculation
+df <- df %>%
+  mutate(
+    age_group_numeric = as.numeric(as.factor(age_group)),  # Encodes age groups as 1, 2, 3
+    gender_numeric = as.numeric(as.factor(gender)),        # Encodes gender (F=1, M=2)
+    test_month_numeric = as.numeric(as.factor(test_month))  # Encodes months as 1-12
+  )
+
+# Estimate Propensity Scores
+ps_model <- glm(period ~ age_group + gender + test_month, data = df, family = binomial)
+df$pscore <- predict(ps_model, type = "response")  
+
+# Compute Inverse Probability of Treatment Weights (IPTW)
+df$iptw <- ifelse(df$period == "D", 1 / df$pscore, 1 / (1 - df$pscore))
+
+# Compute Balance Statistics Using Weighted Data
+balance_stats <- bal.tab(ps_model, weights = df$iptw, 
+                         covs = df[, c("age_group", "gender", "test_month")], 
+                         estimand = "ATE", thresholds = c(m = 0.1)) 
+
+# Convert to Data Frame
+asmd_results <- as.data.frame(balance_stats$Balance)
+
+# Compute Mean ASMD for Each Category
+asmd_summary <- data.frame(
+  Covariate = c("Age Group", "Gender", "Test Month"),
+  Weighted_ASMD = c(  # Fix column name issue
+    mean(asmd_results[grep("age_group", rownames(asmd_results)), "Diff.Adj"], na.rm = TRUE),
+    mean(asmd_results[grep("gender", rownames(asmd_results)), "Diff.Adj"], na.rm = TRUE),
+    mean(asmd_results[grep("test_month", rownames(asmd_results)), "Diff.Adj"], na.rm = TRUE)
+  ),
+  M.Threshold = "Balanced, <0.1"
+)
+
+# Fix Covariate Naming to Match `asmd_results`
+means_table <- df %>%
+  group_by(period) %>%
+  summarise(
+    `Age Group` = mean(age_group_numeric, na.rm = TRUE),
+    `Gender` = mean(gender_numeric, na.rm = TRUE),
+    `Test Month` = mean(test_month_numeric, na.rm = TRUE)
+  ) %>%
+  pivot_longer(cols = -period, names_to = "Covariate", values_to = "Mean")
+
+# Reshape Table to Wide Format (Pre-Pandemic & Pandemic Means)
+means_table_wide <- means_table %>%
+  pivot_wider(names_from = period, values_from = Mean) %>%
+  rename(`Pre-Pandemic Mean` = `B`, `Pandemic Mean` = `D`)
+
+# Merge Means with ASMD Data
+final_balance_table <- asmd_summary %>%
+  rename(`Weighted ASMD` = Weighted_ASMD) %>%  # Ensure correct column name
+  left_join(means_table_wide, by = "Covariate") %>%
+  dplyr::select(Covariate, `Pre-Pandemic Mean`, `Pandemic Mean`, `Weighted ASMD`, M.Threshold)
+
+
+# Print Final Table for Review
+print(final_balance_table)
+  
+# Categorical breakdown
+# Extract and format the full ASMD table (with all individual levels)
+asmd_detailed <- asmd_results %>%
+  rownames_to_column("Covariate_Level") %>%
+  dplyr::select(Covariate_Level, Diff.Adj) %>%
+  rename(`Weighted ASMD` = Diff.Adj)
+
+# Print head for review
+print(head(asmd_detailed, 10))
+
+# Compute variance ratio of propensity scores between treatment groups
+var_ps_treated <- var(df$pscore[df$period == "D"], na.rm = TRUE)
+var_ps_control <- var(df$pscore[df$period == "B"], na.rm = TRUE)
+variance_ratio <- var_ps_treated / var_ps_control
+
+cat("Variance Ratio (Treated / Control):", round(variance_ratio, 3), "\n")
+  
+```
+
+### 4.2 Change in vitamin D deficiency rates
+
+```{r}
+# 1. Treatment indicator (already binary)
+df$treatment <- ifelse(df$period == "D", 1, 0)
+
+# 2. Ensure the deficiency column is numeric 
+df$deficient <- as.numeric(df$deficient)
+
+# 3. Create design matrix (one-hot encode categorical variables)
+X_def <- model.matrix(~ age_group + gender + season, data = df)[, -1]  # remove intercept
+
+# 4. Calculate pre-pandemic average deficiency rate
+pre_pandemic_deficiency_rate <- df %>%
+  filter(period == "B") %>%
+  summarise(avg_deficiency = mean(deficient, na.rm = TRUE)) %>%
+  pull(avg_deficiency)
+
+cat("Pre-pandemic average deficiency rate:", round(pre_pandemic_deficiency_rate, 4), "\n")
+
+# 5. Run causal forest model
+cf_deficiency <- causal_forest(
+  X = X_def,
+  Y = df$deficient,
+  W = df$treatment,
+  num.trees = 2000
+)
+
+# 6. Estimate ATE
+ate_result_deficiency <- average_treatment_effect(cf_deficiency, target.sample = "all")
+ate_estimate_deficiency <- ate_result_deficiency[1]
+ate_std_err_deficiency <- ate_result_deficiency[2]
+
+# 7. Print ATE
+cat("ATE Estimate (Effect on Deficiency Rate):", round(ate_estimate_deficiency, 4), "\n")
+
+# 8. Percentage change relative to pre-pandemic rate
+percentage_change_deficiency <- (ate_estimate_deficiency / pre_pandemic_deficiency_rate) * 100
+cat("Percentage change due to pandemic:", round(percentage_change_deficiency, 2), "%\n")
+
+# 9. Confidence intervals
+z_99 <- 2.576
+z_95 <- 1.960 
+
+ci_99_lower_ate_def <- ate_estimate_deficiency - z_99 * ate_std_err_deficiency
+ci_99_upper_ate_def <- ate_estimate_deficiency + z_99 * ate_std_err_deficiency
+
+ci_95_lower_ate_def <- ate_estimate_deficiency - z_95 * ate_std_err_deficiency
+ci_95_upper_ate_def <- ate_estimate_deficiency + z_95 * ate_std_err_deficiency
+
+cat("99% CI for ATE (Deficiency Rate):", round(ci_99_lower_ate_def, 4), "to", round(ci_99_upper_ate_def, 4), "\n")
+cat("95% CI for ATE (Deficiency Rate):", round(ci_95_lower_ate_def, 4), "to", round(ci_95_upper_ate_def, 4), "\n")
+
+```
+
+#### 4.2.1 FIGURE 4b: Comparison of effect sizes across all 3 methods used
+
+```{r}
+# Extracting ATE estimate and standard error from causal forest model
+ate_estimate_def <- ate_result_deficiency[1]
+ate_std_err_def <- ate_result_deficiency[2]
+
+# Confidence intervals for ATE
+ci_99_lower_ate_def <- ate_estimate_def - z_99 * ate_std_err_def
+ci_99_upper_ate_def <- ate_estimate_def + z_99 * ate_std_err_def
+ci_95_lower_ate_def <- ate_estimate_def - z_95 * ate_std_err_def
+ci_95_upper_ate_def <- ate_estimate_def + z_95 * ate_std_err_def
+
+# Bring all effect size metrics together in one df
+effect_sizes_deficiency <- data.frame(
+  Category = c("Cohen's d", "SMD (PSM)", "ATE (ML)"),
+  Estimate = c(cohens_d_def * sd_pooled_def, smd_def * sd_matched_pooled_def, ate_estimate_def),
+  CI_Lower_99 = c(ci_99_lower_d_def * sd_pooled_def, ci_99_lower_smd_def * sd_matched_pooled_def, ci_99_lower_ate_def),
+  CI_Upper_99 = c(ci_99_upper_d_def * sd_pooled_def, ci_99_upper_smd_def * sd_matched_pooled_def, ci_99_upper_ate_def),
+  CI_Lower_95 = c(ci_95_lower_d_def * sd_pooled_def, ci_95_lower_smd_def * sd_matched_pooled_def, ci_95_lower_ate_def),
+  CI_Upper_95 = c(ci_95_upper_d_def * sd_pooled_def, ci_95_upper_smd_def * sd_matched_pooled_def, ci_95_upper_ate_def)
+)
+
+# Reorder factor levels for display order
+effect_sizes_deficiency$Category <- factor(effect_sizes_deficiency$Category, levels = c("Cohen's d", "SMD (PSM)", "ATE (ML)"))
+
+forest_plot_deficiency <- ggplot(effect_sizes_deficiency, aes(x = Category, y = Estimate)) +
+  # Add points for the ATE estimates
+  geom_point(size = 5, shape = 21, fill = "black", color = "black", stroke = 0.5) +
+  
+  # Add 99% CI as the longest bars
+  geom_linerange(aes(ymin = CI_Lower_99, ymax = CI_Upper_99), size = 1.0, color = "black") +
+  
+  # Add 95% CI as shorter bars
+  geom_linerange(aes(ymin = CI_Lower_95, ymax = CI_Upper_95), size = 2.0, color = "firebrick") +
+  
+  # Add a dashed line at 0 for reference
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  
+  # Flip coordinates for horizontal orientation
+  coord_flip() +
+  
+  # Labels and theme
+  labs(
+    y = "Estimated effect size (percentage points)",  
+    x = NULL  
+  ) +
+  theme_classic(base_size = 16) +  
+  theme(
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 14),
+    plot.title = element_text(size = 18, face = "bold"),
+    panel.grid.major.y = element_line(color = "grey80"),
+    panel.grid.minor.y = element_blank()
+  )
+
+# Display the updated plot
+print(forest_plot_deficiency)
+
+```
+
+
+## 5. Negative Controls Outcome Analysis 1: Entire analysis on a different time frame
+
+```{r}
+# Define the new periods - uncomment the desired time frame to be tested
+
+# Time Frame 1
+period1 <- c(as.Date("2018-03-01"), as.Date("2020-01-31"))
+period2 <- c(as.Date("2020-02-01"), as.Date("2022-02-28"))
+
+# Time Frame 2
+#period1 <- c(as.Date("2018-03-01"), as.Date("2020-03-31"))
+#period2 <- c(as.Date("2020-04-01"), as.Date("2022-02-28"))
+
+# Create a new data frame for robustness check
+df_robust <- df
+
+# Assign each entry to a period
+assign_period <- function(date) {
+  if (date >= period1[1] && date <= period1[2]) {
+    return("B")
+  } else if (date >= period2[1] && date <= period2[2]) {
+    return("D")
+  } else {
+    return(NA) 
+  }
+}
+
+df_robust$period <- as.character(sapply(df_robust$test_date, assign_period))
+df_robust <- df_robust[!is.na(df_robust$period),]
+```
+
+
+### 5.1 Descriptive
+```{r}
+sample_size_period <- df_robust %>% count(period)
+print("Sample size per period:")
+print(sample_size_period)
+
+sample_size_contingency <- with(df_robust, table(period))
+sample_size_p_value <- chisq.test(sample_size_contingency)$p.value
+print("P-value for sample size distribution:")
+print(sample_size_p_value)
+
+age_group_counts <- df_robust %>% group_by(period, age_group) %>%
+  summarise(n = n(), .groups = 'drop') %>% group_by(period) %>%
+  mutate(percentage = n / sum(n) * 100) %>% ungroup()
+print("Age group counts per period:")
+print(age_group_counts)
+
+age_group_p_value <- chisq.test(with(df_robust, table(period, age_group)))$p.value
+print("P-value for age group distribution:")
+print(age_group_p_value)
+
+gender_group_counts <- df_robust %>% group_by(period, gender) %>%
+  summarise(n = n(), .groups = 'drop') %>% group_by(period) %>%
+  mutate(percentage = n / sum(n) * 100) %>% ungroup()
+print("Gender group counts per period:")
+print(gender_group_counts)
+
+gender_group_p_value <- chisq.test(with(df_robust, table(period, gender)))$p.value
+print("P-value for gender distribution:")
+print(gender_group_p_value)
+
+season_counts <- df_robust %>% group_by(period, season) %>%
+  summarise(n = n(), .groups = 'drop') %>% group_by(period) %>%
+  mutate(percentage = n / sum(n) * 100) %>% ungroup()
+print("Seasonal distribution per period:")
+print(season_counts)
+
+season_counts_p_value <- chisq.test(with(df_robust, table(period, season)))$p.value
+print("P-value for seasonal distribution:")
+print(season_counts_p_value)
+
+mean_vitamin_d_levels <- df_robust %>% group_by(period) %>%
+  summarise(mean_value = mean(value_result, na.rm = TRUE),
+            sd_value = sd(value_result, na.rm = TRUE),
+            .groups = 'drop')
+print("Mean and standard deviation of Vitamin D levels per period:")
+print(mean_vitamin_d_levels)
+
+vitamin_d_t_test <- t.test(value_result ~ period, data = df_robust)
+print("T-test results for Vitamin D levels:")
+print(vitamin_d_t_test)
+
+vitamin_d_deficiency_rate <- df_robust %>% group_by(period) %>%
+  summarise(deficiency_count = sum(deficient), 
+            total_count = n(), 
+            deficiency_rate = sum(deficient) / n() * 100, 
+            .groups = 'drop')
+print("Vitamin D deficiency rates per period:")
+print(vitamin_d_deficiency_rate)
+
+deficiency_contingency <- with(df_robust, table(period, deficient))
+deficiency_p_value <- chisq.test(deficiency_contingency)$p.value
+print("P-value for Vitamin D deficiency rate differences:")
+print(deficiency_p_value)
+
+```
+
+### 5.2 PSM
+
+```{r}
+df_robust$gender <- factor(df_robust$gender)
+df_robust$age_group <- factor(df_robust$age_group)
+df_robust$period <- factor(df_robust$period)
+df_robust$test_month <- factor(df_robust$test_month)
+
+test_match_obj <- matchit(period ~ age_group + gender + test_month, data = df_robust, 
+                          method = "nearest", distance = "glm", 
+                          exact = c("gender", "age_group", "test_month")) 
+matched_data <- match.data(test_match_obj)
+
+# Statistical testing for matched data
+vitamin_d_t_test_matched <- t.test(value_result ~ period, data = matched_data)
+print("T-test results for Vitamin D levels in matched data:")
+print(vitamin_d_t_test_matched)
+
+# Contingency table for deficiency rates
+deficiency_contingency_matched <- with(matched_data, table(period, deficient))
+deficiency_p_value_matched <- chisq.test(deficiency_contingency_matched)$p.value
+print("P-value for Vitamin D deficiency rate differences in matched data:")
+print(deficiency_p_value_matched)
+
+# Calculate deficiency rates before and during the pandemic
+deficiency_rates_matched <- prop.table(deficiency_contingency_matched, margin = 1) * 100
+print("Deficiency rates in matched sample (before and during the pandemic):")
+print(deficiency_rates_matched)
+
+```
+
+### 5.3 ML
+
+```{r}
+# Create treatment indicator
+df_robust$treatment <- ifelse(df_robust$period == "D", 1, 0)
+
+# Use model.matrix to one-hot encode categorical covariates (drop intercept column)
+X <- model.matrix(~ age_group + gender + season, data = df_robust)[, -1]
+
+# Fit causal forest
+causal_forest_model <- causal_forest(
+  X = X, 
+  Y = df_robust$value_result, 
+  W = df_robust$treatment, 
+  num.trees = 2000
+)
+
+# Estimate ATE
+ate_result <- average_treatment_effect(causal_forest_model, target.sample = "all")
+
+# Extract point estimate and standard error
+ate_estimate <- ate_result[1]
+ate_std_err <- ate_result[2]
+
+# Print ATE
+print(paste("ATE Estimate:", round(ate_estimate, 4)))
+
+# Calculate and print percentage change
+average_value_result <- mean(df_robust$value_result, na.rm = TRUE)
+percentage_change <- (ate_estimate / average_value_result) * 100
+print(paste("Percentage change due to pandemic:", round(percentage_change, 2), "%"))
+
+# Confidence intervals
+z_99 <- qnorm(0.995)
+z_95 <- qnorm(0.975)
+
+ci_99_lower_ate <- ate_estimate - z_99 * ate_std_err
+ci_99_upper_ate <- ate_estimate + z_99 * ate_std_err
+ci_95_lower_ate <- ate_estimate - z_95 * ate_std_err
+ci_95_upper_ate <- ate_estimate + z_95 * ate_std_err
+
+# Output confidence intervals
+cat("99% Confidence Interval for ATE:", ci_99_lower_ate, "to", ci_99_upper_ate, "\n")
+cat("95% Confidence Interval for ATE:", ci_95_lower_ate, "to", ci_95_upper_ate, "\n")
+
+# Note: Confidence intervals for the ATE estimate are calculated using the formula: CI = ATE ± Z * SE_ATE where Z is the Z-score for the desired confidence level (e.g., 1.960 for 95%, 2.576 for 99%), and SE_ATE is the standard error of the ATE estimate.
+```
+
+## 6. Robustness check: Compare different months of different years
+### 6.1 Descriptive
+```{r}
+# Filter data for the months of March, April, and May for the years 2018, 2019, 2020, and 2021
+df_spring <- df %>%
+  filter(year(test_date) %in% c(2018, 2019, 2020, 2021) &
+           month(test_date) %in% c(3, 4, 5))
+
+# Ensure factors
+df_spring$period <- factor(df_spring$period)
+df_spring$gender <- factor(df_spring$gender)
+df_spring$age_group <- factor(df_spring$age_group)
+df_spring$season <- factor(df_spring$season)
+df_spring$test_month <- factor(month(df_spring$test_date))
+
+# 1. Descriptive Statistics
+spring_vitamin_d_stats <- df_spring %>%
+  group_by(cohort_year, test_month) %>%
+  summarise(mean_vit_d = mean(value_result, na.rm = TRUE),
+            sd_vit_d = sd(value_result, na.rm = TRUE),
+            deficiency_count = sum(deficient, na.rm = TRUE),
+            total_count = n(),
+            deficiency_rate = (sum(deficient, na.rm = TRUE) / n()) * 100,
+            .groups = "drop") %>%
+  arrange(test_month, cohort_year)
+
+print("Vitamin D statistics by year and month:")
+print(spring_vitamin_d_stats)
+
+# Mean Vitamin D levels before and during the pandemic
+mean_vit_d_period <- df_spring %>%
+  group_by(period) %>%
+  summarise(mean_vit_d = mean(value_result, na.rm = TRUE),
+            sd_vit_d = sd(value_result, na.rm = TRUE),
+            .groups = "drop")
+
+print("Mean Vitamin D levels before and during the pandemic:")
+print(mean_vit_d_period)
+
+# Deficiency rates before and during the pandemic
+deficiency_rate_period <- df_spring %>%
+  group_by(period) %>%
+  summarise(deficiency_count = sum(deficient, na.rm = TRUE),
+            total_count = n(),
+            deficiency_rate = (sum(deficient, na.rm = TRUE) / n()) * 100,
+            .groups = "drop")
+
+print("Deficiency rates before and during the pandemic:")
+print(deficiency_rate_period)
+
+# ANOVA test for mean Vitamin D levels
+vitamin_d_anova <- aov(value_result ~ factor(cohort_year) * factor(test_month), data = df_spring)
+summary(vitamin_d_anova)
+
+# Chi-square test for deficiency rate
+deficiency_contingency <- with(df_spring, table(cohort_year, test_month, deficient))
+deficiency_p_value <- chisq.test(rowSums(deficiency_contingency))$p.value
+print("P-value for Vitamin D deficiency rate differences across years and months:")
+print(deficiency_p_value)
+
+```
+### 6.2 PSM
+```{r}
+test_match_obj <- matchit(period ~ age_group + gender + test_month, data = df_spring, 
+                          method = "nearest", distance = "glm", 
+                          exact = c("gender", "age_group", "test_month"))
+matched_data <- match.data(test_match_obj)
+
+# T-test for Vitamin D levels in matched data
+vitamin_d_t_test_matched <- t.test(value_result ~ period, data = matched_data)
+print("T-test results for Vitamin D levels in matched data:")
+print(vitamin_d_t_test_matched)
+
+# Deficiency rates in matched data
+deficiency_contingency_matched <- with(matched_data, table(period, deficient))
+deficiency_p_value_matched <- chisq.test(deficiency_contingency_matched)$p.value
+print("P-value for Vitamin D deficiency rate differences in matched data:")
+print(deficiency_p_value_matched)
+
+deficiency_rates_matched <- prop.table(deficiency_contingency_matched, margin = 1) * 100
+print("Deficiency rates in matched sample (before and during the pandemic):")
+print(deficiency_rates_matched)
+```
+
+### 6.3 ML
+```{r}
+
+# Create treatment indicator
+df_spring$treatment <- ifelse(df_spring$period == "D", 1, 0)
+
+# Ensure categorical variables are factors
+df_spring$age_group <- as.factor(df_spring$age_group)
+df_spring$gender <- as.factor(df_spring$gender)
+df_spring$season <- as.factor(df_spring$season)
+
+# Drop any factor with only one level
+covariates <- c("age_group", "gender", "season")
+valid_covariates <- covariates[sapply(df_spring[covariates], function(x) length(unique(x)) > 1)]
+
+# Build formula dynamically based on valid covariates
+formula <- as.formula(paste("~", paste(valid_covariates, collapse = " + ")))
+
+# Generate model matrix
+X_spring <- model.matrix(formula, data = df_spring)[, -1]
+
+
+# Fit causal forest
+causal_forest_model <- causal_forest(
+  X = X_spring,
+  Y = df_spring$value_result,
+  W = df_spring$treatment,
+  num.trees = 2000
+)
+
+# Estimate ATE
+ate_result <- average_treatment_effect(causal_forest_model, target.sample = "all")
+ate_estimate <- ate_result[1]
+ate_std_err <- ate_result[2]
+
+# Print results
+print(paste("ATE Estimate:", round(ate_estimate, 4)))
+
+# Percentage change based on pre-pandemic average
+average_value_result <- mean(df_spring$value_result, na.rm = TRUE)
+percentage_change <- (ate_estimate / average_value_result) * 100
+print(paste("Percentage change due to pandemic:", round(percentage_change, 2), "%"))
+
+# Confidence intervals
+z_99 <- qnorm(0.995)
+z_95 <- qnorm(0.975)
+
+ci_99_lower_ate <- ate_estimate - z_99 * ate_std_err
+ci_99_upper_ate <- ate_estimate + z_99 * ate_std_err
+ci_95_lower_ate <- ate_estimate - z_95 * ate_std_err
+ci_95_upper_ate <- ate_estimate + z_95 * ate_std_err
+
+# Output CI results
+cat("99% Confidence Interval for ATE:", ci_99_lower_ate, "to", ci_99_upper_ate, "\n")
+cat("95% Confidence Interval for ATE:", ci_95_lower_ate, "to", ci_95_upper_ate, "\n")
+
+
+# Note: Confidence intervals for the ATE estimate are calculated using the formula: CI = ATE ± Z * SE_ATE where Z is the Z-score for the desired confidence level (e.g., 1.960 for 95%, 2.576 for 99%), and SE_ATE is the standard error of the ATE estimate.
+
+```
+
+
+## 7. Robustness check: Hours of sunshine
+
+```{r}
+# Define the base URL
+base_url <- "https://opendata.dwd.de/climate_environment/CDC/regional_averages_DE/monthly/sunshine_duration/"
+
+# Initialize an empty data frame to store sunshine data
+sunshine_data <- data.frame()
+
+# Loop through each month to read and combine the data
+for (i in 1:12) {
+  # Format the file name
+  file_name <- sprintf("regional_averages_sd_%02d.txt", i)
+  file_url <- paste0(base_url, file_name)
+  
+  # Read the data, skipping the first row to use the second row as headers
+  monthly_data <- read_delim(file_url, delim = ";", col_types = cols(), skip = 1)
+  
+  # Select relevant columns (Jahr = year, Monat = month, Bayern = sunshine duration)
+  monthly_data <- monthly_data %>%
+    dplyr::select(Jahr, Monat, Bayern) %>%
+    rename(sunshine_duration = Bayern) %>%
+    mutate(Monat = as.numeric(Monat)) # Ensure month is numeric
+  
+  # Append the monthly data to the combined data frame
+  sunshine_data <- bind_rows(sunshine_data, monthly_data)
+}
+
+# Ensuring year and month are numeric for merging
+df <- df %>%
+  mutate(
+    cohort_year = as.numeric(cohort_year),
+    test_month = as.numeric(test_month)
+  )
+
+# Merge the sunshine data with your existing data frame
+df <- df %>%
+  left_join(sunshine_data, by = c("cohort_year" = "Jahr", "test_month" = "Monat"))
+
+# Check for any unmatched entries
+unmatched_entries <- df %>%
+  filter(is.na(sunshine_duration))
+
+# Print the number of unmatched entries, if any
+cat("Number of entries with missing sunshine duration data:", nrow(unmatched_entries), "\n")
+
+# View the first few rows of the updated data frame
+head(df)
+
+```
+
+```{r}
+# Create treatment indicator
+df$treatment <- ifelse(df$period == "D", 1, 0)
+
+# Ensure sunshine_duration is numeric (already handled)
+df$sunshine_numeric <- as.numeric(df$sunshine_duration)
+
+# One-hot encode categorical variables with model.matrix and exclude intercept
+X_categorical <- model.matrix(~ age_group + gender + season, data = df)[, -1]
+
+# Combine with sunshine variable
+X <- cbind(X_categorical, sunshine_numeric = df$sunshine_numeric)
+
+# Fit causal forest with sunshine covariate
+causal_forest_model_sunshine <- causal_forest(
+  X = X, 
+  Y = df$value_result, 
+  W = df$treatment, 
+  num.trees = 2000
+)
+
+# Estimate ATE (target.sample = "overlap" due to extreme propensity scores with sunshine)
+ate_result_sunshine <- average_treatment_effect(causal_forest_model_sunshine, target.sample = "overlap")
+ate_estimate_sunshine <- ate_result_sunshine[1]
+ate_std_err_sunshine <- ate_result_sunshine[2]
+
+# Print ATE estimate
+print(paste("ATE Estimate (with sunshine):", round(ate_estimate_sunshine, 4)))
+
+# Confidence intervals
+z_99 <- 2.576
+z_95 <- 1.960
+
+ci_99_lower_ate_sunshine <- ate_estimate_sunshine - z_99 * ate_std_err_sunshine
+ci_99_upper_ate_sunshine <- ate_estimate_sunshine + z_99 * ate_std_err_sunshine
+
+ci_95_lower_ate_sunshine <- ate_estimate_sunshine - z_95 * ate_std_err_sunshine
+ci_95_upper_ate_sunshine <- ate_estimate_sunshine + z_95 * ate_std_err_sunshine
+
+# Print confidence intervals
+cat("99% CI for ATE (with sunshine):", ci_99_lower_ate_sunshine, "to", ci_99_upper_ate_sunshine, "\n")
+cat("95% CI for ATE (with sunshine):", ci_95_lower_ate_sunshine, "to", ci_95_upper_ate_sunshine, "\n")
+
+# Note: Confidence intervals for the ATE estimate are calculated using the formula: CI = ATE ± Z * SE_ATE where Z is the Z-score for the desired confidence level (e.g., 1.960 for 95%, 2.576 for 99%), and SE_ATE is the standard error of the ATE estimate.
+
+```
+
+## 8. Robustness check: Randomly shuffling the Vit D results
+
+```{r}
+# Create a copy of df with shuffled Vitamin D values
+df_shuffled <- df %>%
+  mutate(shuffled_value = sample(value_result, replace = FALSE))
+
+# Ensure there are no missing values in the shuffled data
+df_shuffled <- df_shuffled %>%
+  filter(!is.na(shuffled_value))
+```
+
+### 8.1 Descriptive
+```{r}
+# Compute statistics for the shuffled Vitamin D values
+vitamin_d_stats_shuffled <- df_shuffled %>%
+  group_by(cohort_year, test_month) %>%
+  summarise(mean_vit_d = mean(shuffled_value, na.rm = TRUE),
+            sd_vit_d = sd(shuffled_value, na.rm = TRUE),
+            deficiency_count = sum(shuffled_value < thresholds$VD3, na.rm = TRUE),
+            total_count = n(),
+            deficiency_rate = (sum(shuffled_value < thresholds$VD3, na.rm = TRUE) / n()) * 100,
+            .groups = "drop") %>%
+  arrange(test_month, cohort_year)
+
+print("Shuffled Vitamin D statistics by year and month:")
+print(vitamin_d_stats_shuffled)
+
+# Mean Vitamin D levels before and during the pandemic
+mean_vit_d_period_shuffled <- df_shuffled %>%
+  group_by(period) %>%
+  summarise(mean_vit_d = mean(shuffled_value, na.rm = TRUE),
+            sd_vit_d = sd(shuffled_value, na.rm = TRUE),
+            .groups = "drop")
+
+print("Mean Shuffled Vitamin D levels before and during the pandemic:")
+print(mean_vit_d_period_shuffled)
+
+# Deficiency rates before and during the pandemic
+deficiency_rate_period_shuffled <- df_shuffled %>%
+  group_by(period) %>%
+  summarise(deficiency_count = sum(shuffled_value < thresholds$VD3, na.rm = TRUE),
+            total_count = n(),
+            deficiency_rate = (sum(shuffled_value < thresholds$VD3, na.rm = TRUE) / n()) * 100,
+            .groups = "drop")
+
+print("Shuffled Deficiency rates before and during the pandemic:")
+print(deficiency_rate_period_shuffled)
+
+# ANOVA test for mean Vitamin D levels on shuffled data
+vitamin_d_anova_shuffled <- aov(shuffled_value ~ factor(cohort_year) * factor(test_month), data = df_shuffled)
+summary(vitamin_d_anova_shuffled)
+
+# Chi-square test for deficiency rate in shuffled data
+deficiency_contingency_shuffled <- with(df_shuffled, table(cohort_year, test_month, shuffled_value < thresholds$VD3))
+deficiency_p_value_shuffled <- chisq.test(rowSums(deficiency_contingency_shuffled))$p.value
+print("P-value for Shuffled Vitamin D deficiency rate differences across years and months:")
+print(deficiency_p_value_shuffled)
+```
+
+### 8.2 PSM
+```{r}
+test_match_obj_shuffled <- matchit(period ~ age_group + gender + test_month, data = df_shuffled, 
+                                   method = "nearest", distance = "glm", 
+                                   exact = c("gender", "age_group", "test_month"))
+matched_data_shuffled <- match.data(test_match_obj_shuffled)
+
+# T-test for Vitamin D levels in matched shuffled data
+vitamin_d_t_test_matched_shuffled <- t.test(shuffled_value ~ period, data = matched_data_shuffled)
+print("T-test results for Shuffled Vitamin D levels in matched data:")
+print(vitamin_d_t_test_matched_shuffled)
+
+# Deficiency rates in matched shuffled data
+deficiency_contingency_matched_shuffled <- with(matched_data_shuffled, table(period, shuffled_value < thresholds$VD3))
+deficiency_p_value_matched_shuffled <- chisq.test(deficiency_contingency_matched_shuffled)$p.value
+print("P-value for Shuffled Vitamin D deficiency rate differences in matched data:")
+print(deficiency_p_value_matched_shuffled)
+
+deficiency_rates_matched_shuffled <- prop.table(deficiency_contingency_matched_shuffled, margin = 1) * 100
+print("Shuffled Deficiency rates in matched sample (before and during the pandemic):")
+print(deficiency_rates_matched_shuffled)
+```
+
+
+### 8.3 ML
+```{r}
+# Create treatment indicator
+df_shuffled$treatment <- ifelse(df_shuffled$period == "D", 1, 0)
+
+# One-hot encode categorical variables using model.matrix, removing intercept
+X_shuffled <- model.matrix(~ age_group + gender + season, data = df_shuffled)[, -1]
+
+# Run causal forest with shuffled outcome
+causal_forest_model_shuffled <- causal_forest(
+  X = X_shuffled, 
+  Y = df_shuffled$shuffled_value, 
+  W = df_shuffled$treatment, 
+  num.trees = 2000
+)
+
+# Estimate ATE
+ate_result_shuffled <- average_treatment_effect(causal_forest_model_shuffled, target.sample = "all")
+ate_estimate_shuffled <- ate_result_shuffled[1]
+ate_std_err_shuffled <- ate_result_shuffled[2]
+
+# Output ATE estimate
+print(paste("Shuffled ATE Estimate:", round(ate_estimate_shuffled, 4)))
+
+# Compute percentage change
+average_value_result_shuffled <- mean(df_shuffled$shuffled_value, na.rm = TRUE)
+percentage_change_shuffled <- (ate_estimate_shuffled / average_value_result_shuffled) * 100
+print(paste("Shuffled Percentage change due to pandemic:", round(percentage_change_shuffled, 2), "%"))
+
+# Confidence intervals
+z_99 <- 2.576
+z_95 <- 1.960
+
+ci_99_lower_ate_shuffled <- ate_estimate_shuffled - z_99 * ate_std_err_shuffled
+ci_99_upper_ate_shuffled <- ate_estimate_shuffled + z_99 * ate_std_err_shuffled
+ci_95_lower_ate_shuffled <- ate_estimate_shuffled - z_95 * ate_std_err_shuffled
+ci_95_upper_ate_shuffled <- ate_estimate_shuffled + z_95 * ate_std_err_shuffled
+
+cat("99% Confidence Interval for Shuffled ATE:", ci_99_lower_ate_shuffled, "to", ci_99_upper_ate_shuffled, "\n")
+cat("95% Confidence Interval for Shuffled ATE:", ci_95_lower_ate_shuffled, "to", ci_95_upper_ate_shuffled, "\n")
+
+
+# Note: Confidence intervals for the ATE estimate are calculated using the formula: CI = ATE ± Z * SE_ATE where Z is the Z-score for the desired confidence level (e.g., 1.960 for 95%, 2.576 for 99%), and SE_ATE is the standard error of the ATE estimate.
+```
+
+-------------------
+
+## 9. New analyses that were added in response to the reviewer's comments
+
+### 9.1 Addition of postal code as covariate in PSM and ML
+
+#### 9.1.0 Exploration & Descriptive Analyses with the postal code
+```{r}
+# Descriptive statistics with PLZ mapping
+
+# 1. Unique patients per postal code
+patients_per_postal_code <- df %>%
+  group_by(postal_code) %>%
+  summarise(unique_patients = n_distinct(patient), .groups = 'drop')
+
+# 2. Unique patients per PLZ mapping value
+patients_per_plz_mapping <- df %>%
+  group_by(plz_mapping) %>%
+  summarise(unique_patients = n_distinct(patient), .groups = 'drop')
+
+# 3. Unique patients per age group and PLZ mapping
+patients_by_age_plz <- df %>%
+  group_by(age_group, plz_mapping) %>%
+  summarise(unique_patients = n_distinct(patient), .groups = 'drop')
+
+# 4. Unique patients per gender and PLZ mapping
+patients_by_gender_plz <- df %>%
+  group_by(gender, plz_mapping) %>%
+  summarise(unique_patients = n_distinct(patient), .groups = 'drop')
+
+# 5. Mean Vitamin D values per PLZ mapping before vs during
+mean_vitd_by_plz <- df %>%
+  group_by(plz_mapping, period) %>%
+  summarise(mean_value = mean(value_result, na.rm = TRUE), .groups = 'drop')
+
+# 6. Mean Vitamin D values per PLZ mapping and age group before vs during
+mean_vitd_by_plz_age <- df %>%
+  group_by(plz_mapping, age_group, period) %>%
+  summarise(mean_value = mean(value_result, na.rm = TRUE), .groups = 'drop')
+
+# 7. Mean Vitamin D values per PLZ mapping and gender before vs during
+mean_vitd_by_plz_gender <- df %>%
+  group_by(plz_mapping, gender, period) %>%
+  summarise(mean_value = mean(value_result, na.rm = TRUE), .groups = 'drop')
+
+# 8. Deficiency rates per PLZ mapping before vs during
+def_rate_by_plz <- df %>%
+  group_by(plz_mapping, period) %>%
+  summarise(deficient = sum(deficient == 1, na.rm = TRUE),
+            total = n(),
+            deficiency_rate = deficient / total * 100,
+            .groups = 'drop')
+
+# 9. Deficiency rates per PLZ mapping and age group before vs during
+def_rate_by_plz_age <- df %>%
+  group_by(plz_mapping, age_group, period) %>%
+  summarise(deficient = sum(deficient == 1, na.rm = TRUE),
+            total = n(),
+            deficiency_rate = deficient / total * 100,
+            .groups = 'drop')
+
+# 10. Deficiency rates per PLZ mapping and gender before vs during
+def_rate_by_plz_gender <- df %>%
+  group_by(plz_mapping, gender, period) %>%
+  summarise(deficient = sum(deficient == 1, na.rm = TRUE),
+            total = n(),
+            deficiency_rate = deficient / total * 100,
+            .groups = 'drop')
+
+
+print(patients_per_postal_code)
+print(patients_per_plz_mapping)
+print(patients_by_age_plz)
+print(patients_by_gender_plz)
+print(mean_vitd_by_plz)
+print(mean_vitd_by_plz_age)
+print(mean_vitd_by_plz_gender)
+print(def_rate_by_plz)
+print(def_rate_by_plz_age)
+print(def_rate_by_plz_gender)
+
+```
+
+```{r}
+# Exact p values
+
+# Formatter
+format_p_latex <- function(p, digits = 2) {
+  if (length(p) == 0 || is.na(p)) return("$p = \\text{NA}$")
+  if (p == 0) return("$p < 1 \\times 10^{-308}$")
+  s <- formatC(p, format = "e", digits = digits)  # e.g. "2.34e-47"
+  parts <- strsplit(s, "e", fixed = TRUE)[[1]]
+  base <- parts[1]; exp <- as.integer(parts[2])
+  paste0("$p = ", base, " \\times 10^{", exp, "}$")
+}
+
+# Run Welch t-test per region (plz_mapping = "City"/"Rural area"/"Suburb")
+region_pvals <- df %>%
+  filter(!is.na(plz_mapping), period %in% c("B","D")) %>%
+  group_split(plz_mapping) %>%
+  map_dfr(function(subdf) {
+    reg <- unique(subdf$plz_mapping)
+    if (length(reg) != 1) return(NULL)
+    t_res <- tryCatch(
+      t.test(value_result ~ period, data = subdf, var.equal = FALSE),
+      error = function(e) NULL
+    )
+    if (is.null(t_res)) {
+      tibble(region = reg, p_value = NA_real_, p_formatted_latex = "$p = \\text{NA}$")
+    } else {
+      tibble(region = reg,
+             p_value = t_res$p.value,
+             p_formatted_latex = format_p_latex(t_res$p.value))
+    }
+  })
+
+print(region_pvals)
+
+cat("\nRegion-specific p-values:\n",
+    paste0(region_pvals$region, ": ", region_pvals$p_formatted_latex, collapse = "\n"),
+    "\n")
+
+# Run χ² test for deficiency per region
+region_def_pvals <- df %>%
+  filter(!is.na(plz_mapping), period %in% c("B","D")) %>%
+  group_split(plz_mapping) %>%
+  map_dfr(function(subdf) {
+    reg <- unique(subdf$plz_mapping)
+    if (length(reg) != 1) return(NULL)
+    # contingency table: period x deficiency
+    tab <- table(subdf$period, subdf$deficient)
+    if (nrow(tab) < 2 || ncol(tab) < 2) {
+      tibble(region = reg, p_value = NA_real_, p_formatted_latex = "$p = \\text{NA}$")
+    } else {
+      chi <- suppressWarnings(chisq.test(tab, correct = FALSE))
+      tibble(region = reg,
+             p_value = chi$p.value,
+             p_formatted_latex = format_p_latex(chi$p.value))
+    }
+  })
+
+print(region_def_pvals)
+
+cat("\nRegion-specific deficiency p-values:\n",
+    paste0(region_def_pvals$region, ": ", region_def_pvals$p_formatted_latex, collapse = "\n"),
+    "\n")
+
+```
+
+
+#### 9.1.1 PSM
+```{r}
+# Postal Code
+# performing exact matching parameters on the entire sample
+test_match_obj <- matchit(period ~ age_group + gender + test_month + postal_code, data = df, method = "nearest", distance = "glm", exact = c("gender", "age_group", "test_month", "postal_code")) 
+
+matched_data <- match.data(test_match_obj)
+
+# Calculate the sample sizes
+original_size <- nrow(df)  # Total original sample size
+matched_size <- nrow(matched_data)  # Total matched sample size
+
+# Calculate the number and percentage of observations lost
+num_lost <- original_size - matched_size
+percent_lost <- (num_lost / original_size) * 100
+
+# Print results
+cat("Original Sample Size: ", original_size, "\n")
+cat("Matched Sample Size: ", matched_size, "\n")
+cat("Number of Observations Lost: ", num_lost, "\n")
+cat("Percentage Lost: ", percent_lost, "%\n")
+
+# Summary
+summary(test_match_obj)
+```
+
+```{r}
+# Calculate summaries for Age with Chi-squared Test for Independence
+age_summary <- matched_data %>%
+  group_by(period, age_group) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  group_by(period) %>%
+  mutate(percentage = count / sum(count) * 100)
+
+# Conduct Chi-squared Test and append the result
+age_table <- xtabs(count ~ period + age_group, data = age_summary)
+age_chi_sq_test <- tryCatch(chisq.test(age_table), error = function(e) e)
+age_p_value <- ifelse(class(age_chi_sq_test) == "try-error", NA, age_chi_sq_test$p.value)
+
+# Calculate summaries for Gender with Chi-squared Test
+gender_summary <- matched_data %>%
+  group_by(period, gender) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  group_by(period) %>%
+  mutate(percentage = count / sum(count) * 100)
+
+# Conduct Chi-squared Test and append the result
+gender_table <- xtabs(count ~ period + gender, data = gender_summary)
+gender_chi_sq_test <- tryCatch(chisq.test(gender_table), error = function(e) e)
+gender_p_value <- ifelse(class(gender_chi_sq_test) == "try-error", NA, gender_chi_sq_test$p.value)
+
+# Calculate summaries for Test month with Chi-squared Test
+test_month_summary <- matched_data %>%
+  group_by(period, test_month) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  group_by(period) %>%
+  mutate(percentage = count / sum(count) * 100)
+
+# Conduct Chi-squared Test and append the result
+test_month_table <- xtabs(count ~ period + test_month, data = test_month_summary)
+test_month_chi_sq_test <- tryCatch(chisq.test(test_month_table), error = function(e) e)
+test_month_p_value <- ifelse(class(test_month_chi_sq_test) == "try-error", NA, test_month_chi_sq_test$p.value)
+
+# Calculate summaries for Season with Chi-squared Test
+season_summary <- matched_data %>%
+  group_by(period, season) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  group_by(period) %>%
+  mutate(percentage = count / sum(count) * 100)
+
+# Conduct Chi-squared Test and append the result
+season_table <- xtabs(count ~ period + season, data = season_summary)
+season_chi_sq_test <- tryCatch(chisq.test(season_table), error = function(e) e)
+season_p_value <- ifelse(class(season_chi_sq_test) == "try-error", NA, season_chi_sq_test$p.value)
+
+# Calculate mean and standard deviation for Vitamin D levels and perform t-test
+vitamin_d_summary <- matched_data %>%
+  group_by(period) %>%
+  summarise(
+    mean_vitamin_d = mean(value_result, na.rm = TRUE),
+    sd_vitamin_d = sd(value_result, na.rm = TRUE),
+    .groups = 'drop'
+  )
+vitamin_d_t_test <- t.test(value_result ~ period, data = matched_data)
+vitamin_d_p_value <- vitamin_d_t_test$p.value
+
+# Calculate the percentage of deficiencies for each period and perform Chi-squared Test
+deficiency_summary <- matched_data %>%
+  group_by(period) %>%
+  summarise(
+    total = n(),
+    deficient_count = sum(deficient == 1, na.rm = TRUE),
+    non_deficient_count = sum(deficient == 0, na.rm = TRUE),
+    deficiency_rate = deficient_count / total * 100,
+    .groups = 'drop'
+  )
+
+# Create a contingency table for the Chi-squared test
+deficiency_table <- xtabs(~ period + deficient, data = matched_data)
+
+# Conduct Chi-squared Test and append the result
+deficiency_chi_sq_test <- tryCatch(chisq.test(deficiency_table), error = function(e) e)
+deficiency_p_value <- ifelse(class(deficiency_chi_sq_test) == "try-error", NA, deficiency_chi_sq_test$p.value)
+
+# Print the summaries and p-values
+print(age_summary)
+print(paste("Age Group P-value:", age_p_value))
+print(gender_summary)
+print(paste("Gender P-value:", gender_p_value))
+print(test_month_summary)
+print(paste("Test Month P-value:", test_month_p_value))
+print(season_summary)
+print(paste("Season P-value:", season_p_value))
+print(vitamin_d_summary)
+print(paste("Vitamin D Levels P-value:", vitamin_d_p_value))
+print(deficiency_summary)
+print(paste("Deficiency Rate P-value:", deficiency_p_value))
+```
+
+```{r}
+# Effect Size
+
+# Calculate means and SDs for matched data
+mean_matched_b <- mean(matched_data$value_result[matched_data$period == "B"])
+mean_matched_d <- mean(matched_data$value_result[matched_data$period == "D"])
+sd_matched_b <- sd(matched_data$value_result[matched_data$period == "B"])
+sd_matched_d <- sd(matched_data$value_result[matched_data$period == "D"])
+
+# Pooled SD for matched data
+n1_matched <- nrow(matched_data[matched_data$period == "B", ])
+n2_matched <- nrow(matched_data[matched_data$period == "D", ])
+sd_matched_pooled <- sqrt(((n1_matched - 1) * sd_matched_b^2 + 
+                           (n2_matched - 1) * sd_matched_d^2) / 
+                          (n1_matched + n2_matched - 2))
+
+# SMD (flipped sign for "During - Before")
+smd <- (mean_matched_d - mean_matched_b) / sd_matched_pooled  # Flips the direction
+print(paste("Standardized Mean Difference (SMD):", round(smd, 4)))
+
+# Standard error for SMD (same formula as Cohen's d)
+se_smd <- sqrt((n1 + n2) / (n1 * n2) + (smd^2) / (2 * (n1 + n2)))
+
+# Confidence intervals
+ci_99_lower_smd <- smd - z_99 * se_smd
+ci_99_upper_smd <- smd + z_99 * se_smd
+
+ci_95_lower_smd <- smd - z_95 * se_smd  
+ci_95_upper_smd <- smd + z_95 * se_smd  
+
+# Note: Confidence intervals for the Standardized Mean Difference (SMD) are calculated using the formula:CI = SMD ± Z * SE_SMD where Z is the Z-score for the desired confidence level (e.g., 1.960 for 95%, 2.576 for 99%), and SE_SMD is the standard error of the SMD estimate.
+
+# Print results
+cat("99% CI for SMD:", ci_99_lower_smd, "to", ci_99_upper_smd, "\n")
+cat("95% CI for SMD:", ci_95_lower_smd, "to", ci_95_upper_smd, "\n")  
+
+# Ensure sample sizes are numeric to avoid integer overflow
+n1_matched_def <- as.numeric(nrow(matched_data[matched_data$period == "B", ]))
+n2_matched_def <- as.numeric(nrow(matched_data[matched_data$period == "D", ]))
+
+# Compute means and standard deviations for matched deficiency rates
+mean_matched_b_def <- mean(matched_data$deficient[matched_data$period == "B"])
+mean_matched_d_def <- mean(matched_data$deficient[matched_data$period == "D"])
+sd_matched_b_def <- sd(matched_data$deficient[matched_data$period == "B"])
+sd_matched_d_def <- sd(matched_data$deficient[matched_data$period == "D"])
+
+# Pooled SD for matched deficiency data
+sd_matched_pooled_def <- sqrt(((n1_matched_def - 1) * sd_matched_b_def^2 + 
+                               (n2_matched_def - 1) * sd_matched_d_def^2) / 
+                              (n1_matched_def + n2_matched_def - 2))
+
+# SMD for deficiency (flipped sign for "During - Before")
+smd_def <- (mean_matched_d_def - mean_matched_b_def) / sd_matched_pooled_def
+print(paste("SMD for deficiency:", round(smd_def, 4)))
+
+# Standard error for SMD
+se_smd_def <- sqrt((n1_matched_def + n2_matched_def) / (n1_matched_def * n2_matched_def) + (smd_def^2) / (2 * (n1_matched_def + n2_matched_def)))
+
+# Confidence intervals for SMD
+ci_99_lower_smd_def <- smd_def - z_99 * se_smd_def
+ci_99_upper_smd_def <- smd_def + z_99 * se_smd_def
+ci_95_lower_smd_def <- smd_def - z_95 * se_smd_def
+ci_95_upper_smd_def <- smd_def + z_95 * se_smd_def
+
+# Print results
+cat("99% CI for SMD:", ci_99_lower_smd_def, "to", ci_99_upper_smd_def, "\n")
+cat("95% CI for SMD:", ci_95_lower_smd_def, "to", ci_95_upper_smd_def, "\n")
+
+# Note: Confidence intervals for the Standardized Mean Difference (SMD) are calculated using the formula:CI = SMD ± Z * SE_SMD where Z is the Z-score for the desired confidence level (e.g., 1.960 for 95%, 2.576 for 99%), and SE_SMD is the standard error of the SMD estimate.
+```
+
+#### 9.1.2 ML
+
+```{r}
+# Create treatment variable
+df$treatment <- ifelse(df$period == "D", 1, 0)
+
+# One-hot encode categorical variables using model.matrix
+X <- model.matrix(~ age_group + gender + season + postal_code, data = df)[, -1]
+
+# Calculate pre-pandemic average
+average_value_result <- df %>%
+  filter(period == "B") %>%
+  summarise(avg_value = mean(value_result, na.rm = TRUE)) %>%
+  pull(avg_value)
+
+print(paste("Pre-pandemic average combined value:", round(average_value_result, 4)))
+
+# Run causal forest
+causal_forest_model <- causal_forest(
+  X = X, 
+  Y = df$value_result, 
+  W = df$treatment, 
+  num.trees = 2000
+)
+
+# Estimate ATE
+ate_result <- average_treatment_effect(causal_forest_model, target.sample = "all")
+ate_estimate <- ate_result[1]
+ate_std_err <- ate_result[2]
+
+# Print ATE
+print(paste("ATE Estimate:", round(ate_estimate, 4)))
+
+# Calculate % change
+percentage_change <- (ate_estimate / average_value_result) * 100
+print(paste("Percentage change due to pandemic:", round(percentage_change, 2), "%"))
+
+# Confidence intervals
+z_99 <- 2.576
+z_95 <- 1.960
+
+ci_99_lower_ate <- ate_estimate - z_99 * ate_std_err
+ci_99_upper_ate <- ate_estimate + z_99 * ate_std_err
+ci_95_lower_ate <- ate_estimate - z_95 * ate_std_err
+ci_95_upper_ate <- ate_estimate + z_95 * ate_std_err
+
+cat("99% CI for ATE:", ci_99_lower_ate, "to", ci_99_upper_ate, "\n")
+cat("95% CI for ATE:", ci_95_lower_ate, "to", ci_95_upper_ate, "\n")
+
+
+# Note: Confidence intervals for the ATE estimate are calculated using the formula: CI = ATE ± Z * SE_ATE where Z is the Z-score for the desired confidence level (e.g., 1.960 for 95%, 2.576 for 99%), and SE_ATE is the standard error of the ATE estimate.
+```
+
+#### 9.1.3 FIGURE S4: Plots
+```{r}
+# Set Z-scores for confidence intervals
+z_95 <- qnorm(0.975)  # 1.96
+z_99 <- qnorm(0.995)  # 2.576
+
+# Create binary treatment variable
+df$treatment <- ifelse(df$period == "D", 1, 0)
+
+# Prepare a data frame to store results
+regional_results <- data.frame()
+
+# Loop over each regional group
+for (region in unique(df$plz_mapping)) {
+  
+  df_sub <- df %>% filter(plz_mapping == region)
+
+  # Remove rows with NA in key variables
+  df_sub_clean <- df_sub %>%
+    filter(
+      !is.na(value_result),
+      !is.na(treatment),
+      !is.na(age_group),
+      !is.na(gender),
+      !is.na(season),
+      !is.na(postal_code)
+    )
+
+  # Skip if not enough data
+  if (nrow(df_sub_clean) < 100) next
+
+  # Create design matrix with one-hot encoding for covariates (excluding intercept)
+  X <- model.matrix(~ age_group + gender + season + postal_code, data = df_sub_clean)[, -1]
+
+  # Run causal forest
+  cf <- causal_forest(
+    X = X,
+    Y = df_sub_clean$value_result,
+    W = df_sub_clean$treatment,
+    num.trees = 2000
+  )
+
+  # Get ATE and SE
+  ate <- average_treatment_effect(cf, target.sample = "all")
+  ate_estimate <- ate[1]
+  ate_se <- ate[2]
+
+  # Calculate confidence intervals
+  ci_95_lower <- ate_estimate - z_95 * ate_se
+  ci_95_upper <- ate_estimate + z_95 * ate_se
+  ci_99_lower <- ate_estimate - z_99 * ate_se
+  ci_99_upper <- ate_estimate + z_99 * ate_se
+
+  # Store results
+  regional_results <- rbind(regional_results, data.frame(
+    Category = paste("Region:", region),
+    ATE_Estimate = ate_estimate,
+    CI_Lower_95 = ci_95_lower,
+    CI_Upper_95 = ci_95_upper,
+    CI_Lower_99 = ci_99_lower,
+    CI_Upper_99 = ci_99_upper
+  ))
+}
+
+# Reorder factor levels by ATE estimate for nice plotting
+regional_results$Category <- factor(
+  regional_results$Category,
+  levels = regional_results$Category[order(regional_results$ATE_Estimate)]
+)
+
+# Create forest plot
+forest_plot <- ggplot(regional_results, aes(x = Category, y = ATE_Estimate)) +
+  geom_point(size = 5, shape = 21, fill = "black", color = "black", stroke = 0.5) +
+  geom_linerange(aes(ymin = CI_Lower_99, ymax = CI_Upper_99), size = 1.0, color = "black") +
+  geom_linerange(aes(ymin = CI_Lower_95, ymax = CI_Upper_95), size = 2.0, color = "firebrick") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  coord_flip() +
+  labs(
+    x = "Region",
+    y = "Estimated pandemic effect on vitamin D (µg/l)"
+  ) +
+  theme_classic(base_size = 16) +
+  theme(
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 12),
+    plot.title = element_text(hjust = 0.5, size = 18, face = "bold")
+  )
+
+
+```
+
+
+### 9.2 Longitudinal analyses
+#### 9.2.1 Last measurement per person - NOT INCLUDED IN THE PAPER
+```{r}
+# First: identifying all measurements of patients who have follow-ups
+df_multiple_measurements <- df_all_measurements %>%
+  group_by(patient) %>%
+  filter(n() > 1) %>%
+  ungroup()
+
+# Check # Patients with follow-ups
+n_distinct(df_multiple_measurements$patient)
+```
+```{r}
+# Limit data frame to only contain the last measurement per patient
+df_last_measurement <- df_multiple_measurements %>%
+  arrange(patient, cohort_year, test_month) %>%
+  group_by(patient) %>%
+  slice_tail(n = 1) %>%
+  ungroup()
+```
+
+```{r}
+# Descriptive
+sample_size_period <- df_last_measurement %>% count(period)
+print(sample_size_period)
+
+sample_size_contingency <- with(df_last_measurement, table(period))
+sample_size_p_value <- chisq.test(sample_size_contingency)$p.value
+print(sample_size_p_value)
+
+age_group_counts <- df_last_measurement %>% group_by(period, age_group) %>%
+  summarise(n = n(), .groups = 'drop') %>% group_by(period) %>%
+  mutate(percentage = n / sum(n) * 100) %>% ungroup()
+print(age_group_counts)
+
+age_group_p_value <- chisq.test(with(df_last_measurement, table(period, age_group)))$p.value
+print(age_group_p_value)
+
+gender_group_counts <- df_last_measurement %>% group_by(period, gender) %>%
+  summarise(n = n(), .groups = 'drop') %>% group_by(period) %>%
+  mutate(percentage = n / sum(n) * 100) %>% ungroup()
+print(gender_group_counts)
+
+gender_group_p_value <- chisq.test(with(df_last_measurement, table(period, gender)))$p.value
+print(gender_group_p_value)
+
+season_counts <- df_last_measurement %>% group_by(period, season) %>%
+  summarise(n = n(), .groups = 'drop') %>% group_by(period) %>%
+  mutate(percentage = n / sum(n) * 100) %>% ungroup()
+print(season_counts)
+
+season_counts_p_value <- chisq.test(with(df_last_measurement, table(period, season)))$p.value
+print(season_counts_p_value)
+
+mean_vitamin_d_levels <- df_last_measurement %>% group_by(period) %>%
+  summarise(mean_value = mean(value_result, na.rm = TRUE),
+            sd_value = sd(value_result, na.rm = TRUE),
+            .groups = 'drop')
+print(mean_vitamin_d_levels)
+
+vitamin_d_t_test <- t.test(value_result ~ period, data = df_last_measurement)
+print(vitamin_d_t_test)
+
+vitamin_d_deficiency_rate <- df_last_measurement %>% group_by(period) %>%
+  summarise(deficiency_count = sum(deficient), 
+            total_count = n(), 
+            deficiency_rate = sum(deficient) / n() * 100, 
+            .groups = 'drop')
+print(vitamin_d_deficiency_rate)
+
+deficiency_contingency <- with(df_last_measurement, table(period, deficient))
+deficiency_p_value <- chisq.test(deficiency_contingency)$p.value
+print(deficiency_p_value)
+
+```
+
+
+```{r}
+# PSM
+# Ensure variables are factors
+df_last_measurement$gender <- factor(df_last_measurement$gender)
+df_last_measurement$age_group <- factor(df_last_measurement$age_group)
+df_last_measurement$period <- factor(df_last_measurement$period)
+df_last_measurement$test_month <- factor(df_last_measurement$test_month)
+df_last_measurement$season <- factor(df_last_measurement$season)
+
+# Perform exact matching (no postal_code)
+test_match_obj <- matchit(period ~ age_group + gender + test_month, 
+                          data = df_last_measurement, 
+                          method = "nearest", distance = "glm", 
+                          exact = c("gender", "age_group", "test_month")) 
+
+matched_data <- match.data(test_match_obj)
+
+# Sample size statistics
+original_size <- nrow(df_last_measurement)
+matched_size <- nrow(matched_data)
+num_lost <- original_size - matched_size
+percent_lost <- (num_lost / original_size) * 100
+
+cat("Original Sample Size: ", original_size, "\n")
+cat("Matched Sample Size: ", matched_size, "\n")
+cat("Number of Observations Lost: ", num_lost, "\n")
+cat("Percentage Lost: ", percent_lost, "%\n")
+
+# Matching summary
+summary(test_match_obj)
+```
+```{r}
+# Age group summary and chi-squared test
+age_summary <- matched_data %>%
+  group_by(period, age_group) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  group_by(period) %>%
+  mutate(percentage = count / sum(count) * 100)
+
+age_table <- xtabs(count ~ period + age_group, data = age_summary)
+age_chi_sq_test <- tryCatch(chisq.test(age_table), error = function(e) e)
+age_p_value <- ifelse(class(age_chi_sq_test) == "try-error", NA, age_chi_sq_test$p.value)
+
+# Gender summary and chi-squared test
+gender_summary <- matched_data %>%
+  group_by(period, gender) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  group_by(period) %>%
+  mutate(percentage = count / sum(count) * 100)
+
+gender_table <- xtabs(count ~ period + gender, data = gender_summary)
+gender_chi_sq_test <- tryCatch(chisq.test(gender_table), error = function(e) e)
+gender_p_value <- ifelse(class(gender_chi_sq_test) == "try-error", NA, gender_chi_sq_test$p.value)
+
+# Test month summary and chi-squared test
+test_month_summary <- matched_data %>%
+  group_by(period, test_month) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  group_by(period) %>%
+  mutate(percentage = count / sum(count) * 100)
+
+test_month_table <- xtabs(count ~ period + test_month, data = test_month_summary)
+test_month_chi_sq_test <- tryCatch(chisq.test(test_month_table), error = function(e) e)
+test_month_p_value <- ifelse(class(test_month_chi_sq_test) == "try-error", NA, test_month_chi_sq_test$p.value)
+
+# Season summary and chi-squared test
+season_summary <- matched_data %>%
+  group_by(period, season) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  group_by(period) %>%
+  mutate(percentage = count / sum(count) * 100)
+
+season_table <- xtabs(count ~ period + season, data = season_summary)
+season_chi_sq_test <- tryCatch(chisq.test(season_table), error = function(e) e)
+season_p_value <- ifelse(class(season_chi_sq_test) == "try-error", NA, season_chi_sq_test$p.value)
+
+# Vitamin D summary and t-test
+vitamin_d_summary <- matched_data %>%
+  group_by(period) %>%
+  summarise(
+    mean_vitamin_d = mean(value_result, na.rm = TRUE),
+    sd_vitamin_d = sd(value_result, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+vitamin_d_t_test <- t.test(value_result ~ period, data = matched_data)
+vitamin_d_p_value <- vitamin_d_t_test$p.value
+
+# Deficiency summary and chi-squared test
+deficiency_summary <- matched_data %>%
+  group_by(period) %>%
+  summarise(
+    total = n(),
+    deficient_count = sum(deficient == 1, na.rm = TRUE),
+    non_deficient_count = sum(deficient == 0, na.rm = TRUE),
+    deficiency_rate = deficient_count / total * 100,
+    .groups = 'drop'
+  )
+
+deficiency_table <- xtabs(~ period + deficient, data = matched_data)
+deficiency_chi_sq_test <- tryCatch(chisq.test(deficiency_table), error = function(e) e)
+deficiency_p_value <- ifelse(class(deficiency_chi_sq_test) == "try-error", NA, deficiency_chi_sq_test$p.value)
+
+# Print summaries and p-values
+print(age_summary); print(paste("Age Group P-value:", age_p_value))
+print(gender_summary); print(paste("Gender P-value:", gender_p_value))
+print(test_month_summary); print(paste("Test Month P-value:", test_month_p_value))
+print(season_summary); print(paste("Season P-value:", season_p_value))
+print(vitamin_d_summary); print(paste("Vitamin D Levels P-value:", vitamin_d_p_value))
+print(deficiency_summary); print(paste("Deficiency Rate P-value:", deficiency_p_value))
+```
+
+
+```{r}
+# ML
+df_last_measurement$age_group_numeric <- as.integer(factor(df_last_measurement$age_group))
+df_last_measurement$gender_numeric <- as.integer(factor(df_last_measurement$gender))
+df_last_measurement$season_numeric <- as.integer(factor(df_last_measurement$season))
+df_last_measurement$treatment <- ifelse(df_last_measurement$period == "D", 1, 0)
+
+causal_forest_model <- causal_forest(
+  X = df_last_measurement[c("age_group_numeric", "gender_numeric", "season_numeric")], 
+  Y = df_last_measurement$value_result, 
+  W = df_last_measurement$treatment, 
+  num.trees = 2000
+)
+
+ate_result <- average_treatment_effect(causal_forest_model, target.sample = "all")
+
+ate_estimate <- ate_result[1]
+ate_std_err <- ate_result[2]
+
+print(paste("ATE Estimate:", round(ate_estimate, 4)))
+
+average_value_result <- mean(df_last_measurement$value_result, na.rm = TRUE)
+percentage_change <- (ate_estimate / average_value_result) * 100
+print(paste("Percentage change due to pandemic:", round(percentage_change, 2), "%"))
+
+ci_99_lower_ate <- ate_estimate - z_99 * ate_std_err
+ci_99_upper_ate <- ate_estimate + z_99 * ate_std_err
+ci_95_lower_ate <- ate_estimate - z_95 * ate_std_err
+ci_95_upper_ate <- ate_estimate + z_95 * ate_std_err
+
+cat("99% Confidence Interval for ATE:", ci_99_lower_ate, "to", ci_99_upper_ate, "\n")
+cat("95% Confidence Interval for ATE:", ci_95_lower_ate, "to", ci_95_upper_ate, "\n")
+```
+
+#### 9.2.2 Within-subject analysis
+
+```{r}
+# Exploration of cohorts 
+# Count number of tests per patient per period
+test_counts <- df_all_measurements %>%
+  filter(period %in% c("B", "D")) %>%
+  group_by(patient, period) %>%
+  summarise(n_tests = n(), .groups = "drop")
+
+# Create frequency table: how many patients had X tests in each period
+test_distribution <- test_counts %>%
+  group_by(period, n_tests) %>%
+  summarise(n_patients = n(), .groups = "drop") %>%
+  arrange(period, n_tests)
+
+# Print the distribution table
+print(test_distribution)
+```
+
+
+```{r}
+# Keep only patients with measurements in both periods
+patients_before <- df_all_measurements %>% filter(period == "B") %>% distinct(patient)
+patients_during <- df_all_measurements %>% filter(period == "D") %>% distinct(patient)
+ 
+patients_longitudinal <- inner_join(patients_before, patients_during, by = "patient")
+ 
+df_longitudinal <- df_all_measurements %>%
+  semi_join(patients_longitudinal, by = "patient")
+ 
+df_longitudinal$patient <- as.factor(df_longitudinal$patient)
+df_longitudinal$period <- factor(df_longitudinal$period, levels = c("B", "D"))
+ 
+model <- lme(
+  value_result ~ period + age + gender + season,
+  random = ~ period | patient,
+  data = df_longitudinal,
+  method = "REML"  
+)
+ 
+summary(model)
+```
+ 
+ 
+ 
+### 9.3 Regression analysis add-on
+
+#### 9.3.1 Multivariable logistic regression vitamin D deficiency
+
+```{r}
+# Convert variables to factors
+df$period <- factor(df$period)
+df$age_group <- factor(df$age_group)
+df$gender <- factor(df$gender)
+df$season <- factor(df$season)
+df$deficient <- as.integer(df$deficient)
+
+# Logistic regression model
+logistic_model <- glm(deficient ~ period + age_group + gender + season,
+                      data = df, family = binomial)
+
+# Summary and odds ratios with 99% confidence intervals
+summary(logistic_model)
+odds_ratios <- exp(coef(logistic_model))
+conf_int_99_logit <- exp(confint(logistic_model, level = 0.99))
+print(data.frame(OddsRatio = odds_ratios,
+                 CI_lower = conf_int_99_logit[, 1],
+                 CI_upper = conf_int_99_logit[, 2]))
+```
+
+#### 9.3.2 Multivariable linear regression mean vitamin D levels
+```{r}
+# Linear regression model
+linear_model <- lm(value_result ~ period + age_group + gender + season, data = df)
+
+# Summary and adjusted differences
+summary(linear_model)
+
+# 99% confidence intervals for coefficients
+conf_int_99_lm <- confint(linear_model, level = 0.99)
+print(conf_int_99_lm)
+
+```
+
+### 9.4 Linear Time Trend Analysis
+
+```{r}
+# --- p-value formatter -> "p = 5.6 × 10⁻¹⁸" (Unicode superscripts) ----------
+format_p <- function(p, digits = 2) {
+  sup <- c("0"="⁰","1"="¹","2"="²","3"="³","4"="⁴","5"="⁵",
+           "6"="⁶","7"="⁷","8"="⁸","9"="⁹","-"="⁻","+"="⁺")
+  to_sup <- function(n) paste0(sup[strsplit(as.character(n), "")[[1]]], collapse = "")
+  vapply(p, function(x){
+    if (is.na(x)) return(NA_character_)
+    s <- formatC(x, format = "e", digits = digits)   # e.g., "5.60e-18"
+    parts <- strsplit(s, "e")[[1]]
+    paste0("p = ", parts[1], " × 10", to_sup(as.integer(parts[2])))
+  }, character(1))
+}
+
+# ============================================================================
+# Create dummy variables for predictors (excluding intercept)
+X_trend <- model.matrix(~ age_group + gender + season, data = df)[, -1]
+colnames(X_trend) <- make.names(colnames(X_trend))  # Clean names
+
+# Combine into modeling data frame
+df_trend <- cbind(value_result = df$value_result,
+                  deficient    = df$deficient,
+                  time_numeric = df$time_numeric,
+                  X_trend)
+
+# Build formulas dynamically
+predictors   <- colnames(df_trend)[!(colnames(df_trend) %in% c("value_result", "deficient"))]
+formula_lm   <- as.formula(paste("value_result ~", paste(predictors, collapse = " + ")))
+formula_logit<- as.formula(paste("deficient ~",     paste(predictors, collapse = " + ")))
+
+# Fit models
+lm_time    <- lm(formula_lm, data = as.data.frame(df_trend))
+logit_time <- glm(formula_logit, data = as.data.frame(df_trend), family = binomial)
+
+# Tidy model outputs with 99% CI + formatted exact p-values
+lm_99ci <- broom::tidy(lm_time, conf.int = TRUE, conf.level = 0.99) %>%
+  dplyr::mutate(p_value_exact = format_p(p.value)) %>%
+  dplyr::select(term, estimate, conf.low, conf.high, p_value_exact)
+
+logit_99ci <- broom::tidy(logit_time, conf.int = TRUE, conf.level = 0.99) %>%
+  dplyr::mutate(p_value_exact = format_p(p.value)) %>%
+  dplyr::select(term, estimate, conf.low, conf.high, p_value_exact)
+
+# Print results
+cat("\n=== Linear Model: 99% CI + exact p-values ===\n")
+print(lm_99ci)
+
+cat("\n=== Logistic Model: 99% CI + exact p-values ===\n")
+print(logit_99ci)
+
+```
+
+```{r}
+# Exact p values time variable
+
+# LaTeX-ready p-value formatter (single backslash)
+format_p_latex <- function(p, digits = 2) {
+  if (is.na(p)) return("$p = \\text{NA}$")
+  if (p == 0)   return("$p < 1 \\times 10^{-308}$")
+  s <- formatC(p, format = "e", digits = digits)  # e.g. "2.34e-47"
+  parts <- strsplit(s, "e", fixed = TRUE)[[1]]
+  paste0("$p = ", parts[1], " \\times 10^{", as.integer(parts[2]), "}$")
+}
+
+# 1) Build continuous time in months from test_date
+anchor_date <- as.Date("2018-03-01")
+df <- df %>%
+  mutate(
+    test_date   = as.Date(test_date),
+    time_months = as.numeric(interval(anchor_date, test_date) / months(1))
+  )
+
+# 2) Fit models (time + covariates)
+lm_time    <- lm(value_result ~ time_months + age_group + gender + season, data = df)
+logit_time <- glm(deficient    ~ time_months + age_group + gender + season, data = df, family = binomial)
+
+# 3) Tidy, vectorized formatting of p-values
+lm_99ci <- tidy(lm_time, conf.int = TRUE, conf.level = 0.99) %>%
+  mutate(p_value_latex = map_chr(p.value, format_p_latex))
+
+logit_99ci <- tidy(logit_time, conf.int = TRUE, conf.level = 0.99) %>%
+  mutate(p_value_latex = map_chr(p.value, format_p_latex))
+
+# Extract LaTeX-ready p-values for Time (months)
+p_time_linear_latex <- lm_99ci  %>% filter(term == "time_months")  %>% pull(p_value_latex) %>% .[1]
+p_time_logit_latex  <- logit_99ci %>% filter(term == "time_months") %>% pull(p_value_latex) %>% .[1]
+
+cat(
+  "\nExact p-values for Time (months):\n",
+  "Linear model:  ", p_time_linear_latex,  "\n",
+  "Logistic model:", p_time_logit_latex,   "\n",
+  sep = ""
+)
+
+```
+
+
